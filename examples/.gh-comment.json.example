@@ -1,0 +1,4 @@
+{
+  "dedupe": "similar",
+  "similarityThreshold": 0.96
+}

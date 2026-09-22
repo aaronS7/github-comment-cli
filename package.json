@@ -1,0 +1,15 @@
+{
+  "name": "github-comment-cli",
+  "version": "0.1.0",
+  "description": "Post Markdown PR comments with verified, commit-pinned local code references.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "bin": { "gh-comment": "bin/gh-comment.js" },
+  "files": ["bin/", "src/", "examples/", "README.md"],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check bin/gh-comment.js && node --check src/cli.js && node --check src/markdown.js && node --check src/git.js && node --check src/github.js && node --check src/config.js && node --check src/dedupe.js && node --check src/publish.js && node --check src/attachment-data.js && node --check src/attachment-markdown.js && node --check src/attachment-metadata.js && node --check src/attachments.js",
+    "prepack": "npm run check && npm test"
+  },
+  "dependencies": { "mdast-util-from-markdown": "^2.0.2" }
+}
