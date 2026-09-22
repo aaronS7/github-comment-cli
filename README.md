@@ -1,5 +1,7 @@
 # github-comment-cli
 
+[Project site](https://aarons7.github.io/github-comment-cli/)
+
 Turn a Markdown file into one or more GitHub pull request comments. Write links to local source lines, include images or videos, preview the result, then publish. Code references become permanent GitHub URLs and local media become native GitHub attachments. Exact duplicate comments are skipped by default; optional similarity checks also skip near duplicates.
 
 ```markdown
