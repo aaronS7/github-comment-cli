@@ -5,7 +5,7 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "bin": { "gh-comment": "bin/gh-comment.js" },
-  "files": ["bin/", "src/", "examples/", "README.md"],
+  "files": ["bin/", "src/", "examples/", "README.md", "llms.txt", ".agents/"],
   "scripts": {
     "test": "node --test",
     "check": "node --check bin/gh-comment.js && node --check src/cli.js && node --check src/markdown.js && node --check src/git.js && node --check src/github.js && node --check src/config.js && node --check src/dedupe.js && node --check src/publish.js && node --check src/attachment-data.js && node --check src/attachment-markdown.js && node --check src/attachment-metadata.js && node --check src/attachments.js",

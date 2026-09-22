@@ -16,6 +16,10 @@ Please check the [validation](https://github.com/owner/repo/blob/COMMIT_SHA/src/
 
 The first version creates comments in the PR conversation. Inline review threads attached to a diff are a future feature.
 
+## Agent resources
+
+The repository includes [`llms.txt`](llms.txt) as a compact map of its documentation and implementation, plus a [GitHub PR comments skill](.agents/skills/github-comment-cli/SKILL.md) with an agent workflow for drafting, previewing, and publishing comments.
+
 ## Install from source
 
 Requires Node.js 22 or newer and Git. From this project's directory:
