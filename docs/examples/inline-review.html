@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Example of a gh-comment batch review with two inline pull request threads and a suggested edit.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: https: http:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>Inline review example · github-comment</title>
+  <style>
+:root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f6f8fa; color: #1f2328; font-size: 14px; line-height: 1.5; }
+a { color: #0969da; text-decoration: none; }
+a:hover { text-decoration: underline; }
+.page { width: min(100% - 32px, 900px); margin: 34px auto 80px; }
+.masthead { margin-bottom: 28px; }
+.eyebrow { display: inline-block; padding: 3px 9px; border: 1px solid #bf8700; border-radius: 999px; color: #7d4e00; background: #fff8c5; font-weight: 600; font-size: 12px; }
+h1 { margin: 10px 0 3px; font-size: 26px; letter-spacing: -.03em; }
+.subtitle, .metadata, .muted { color: #59636e; }
+.subtitle { margin: 0; }
+.metadata { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 12px; font-size: 12px; }
+.metadata code, .location code { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+.review-group { margin-top: 25px; padding: 14px 16px 17px; border: 1px solid #d1d9e0; border-radius: 8px; background: #eef4ff; }
+.group-heading { margin: 0 0 12px; font-weight: 600; color: #3b5b9b; }
+.entry { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; margin: 20px 0; }
+.review-group .entry { margin: 10px 0 0; }
+.avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #d8dee4; color: #59636e; font-weight: 700; }
+.bubble { min-width: 0; overflow: hidden; border: 1px solid #d1d9e0; border-radius: 6px; background: #fff; }
+.bubble-header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px; padding: 8px 14px; border-bottom: 1px solid #d1d9e0; background: #f6f8fa; }
+.bubble-header strong { font-weight: 600; }
+.bubble-header .kind { color: #59636e; font-size: 12px; }
+.location { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; padding: 9px 14px; border-bottom: 1px solid #d1d9e0; background: #f6f8fa; font-size: 12px; }
+.location code { overflow-wrap: anywhere; }
+.badge { display: inline-block; padding: 1px 7px; border: 1px solid #d1d9e0; border-radius: 999px; color: #59636e; background: #fff; font-size: 11px; font-weight: 600; }
+.badge.resolvable { border-color: #a3d9a5; color: #1a7f37; background: #dafbe1; }
+.markdown { padding: 15px 16px; overflow-wrap: anywhere; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown h1, .markdown h2 { border-bottom: 1px solid #d1d9e0; padding-bottom: .28em; }
+.markdown h1 { font-size: 1.75em; }
+.markdown h2 { font-size: 1.4em; }
+.markdown h3 { font-size: 1.18em; }
+.markdown h4, .markdown h5, .markdown h6 { font-size: 1em; }
+.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown pre, .markdown table, .markdown details { margin: 0 0 16px; }
+.markdown ul, .markdown ol { padding-left: 2em; }
+.markdown li + li { margin-top: .25em; }
+.markdown input[type=checkbox] { margin-right: .45em; }
+.markdown blockquote { padding: 0 1em; border-left: 4px solid #d1d9e0; color: #59636e; }
+.markdown code { padding: .15em .35em; border-radius: 4px; background: #eff1f3; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .88em; }
+.markdown pre { overflow: auto; padding: 14px 16px; border-radius: 6px; background: #f6f8fa; }
+.markdown pre code { padding: 0; background: transparent; white-space: pre; }
+.markdown pre code.language-suggestion { display: block; margin: -14px -16px; padding: 14px 16px; background: #dafbe1; }
+.markdown img { max-width: 100%; height: auto; border-radius: 4px; }
+.markdown table { display: block; width: max-content; max-width: 100%; overflow: auto; border-spacing: 0; border-collapse: collapse; }
+.markdown th, .markdown td { padding: 6px 13px; border: 1px solid #d1d9e0; }
+.markdown tr:nth-child(even) { background: #f6f8fa; }
+.markdown details { padding: 9px 12px; border: 1px solid #d1d9e0; border-radius: 6px; }
+.markdown summary { cursor: pointer; font-weight: 600; }
+.markdown details > :last-child { margin-bottom: 0; }
+.media-fallback { display: inline-block; padding: 9px 12px; border: 1px dashed #d1d9e0; border-radius: 6px; color: #59636e; background: #f6f8fa; }
+@media (prefers-color-scheme: dark) {
+  body { background: #0d1117; color: #e6edf3; }
+  a { color: #58a6ff; }
+  .subtitle, .metadata, .muted, .bubble-header .kind { color: #8b949e; }
+  .eyebrow { border-color: #9e6a03; color: #f0b72f; background: #3d2d00; }
+  .review-group { border-color: #30363d; background: #111c33; }
+  .group-heading { color: #a5c2ff; }
+  .avatar { background: #30363d; color: #c9d1d9; }
+  .bubble { border-color: #30363d; background: #161b22; }
+  .bubble-header, .location { border-color: #30363d; background: #21262d; }
+  .badge { border-color: #30363d; color: #c9d1d9; background: #161b22; }
+  .badge.resolvable { border-color: #238636; color: #7ee787; background: #0b2a16; }
+  .markdown h1, .markdown h2, .markdown th, .markdown td, .markdown details { border-color: #30363d; }
+  .markdown blockquote { border-color: #3d444d; color: #8b949e; }
+  .markdown code, .markdown pre, .markdown tr:nth-child(even), .media-fallback { background: #21262d; }
+  .markdown pre code.language-suggestion { background: #0b2a16; }
+  .media-fallback { border-color: #3d444d; color: #8b949e; }
+}</style>
+</head>
+<body>
+  <main class="page">
+    <header class="masthead">
+      <span class="eyebrow">Example preview · nothing posted</span>
+      <h1>aaronS7/github-comment-cli / PR #2</h1>
+      <p class="subtitle">A static example generated by <code>gh-comment preview</code> against PR #2. The final avatar and styling come from GitHub.</p>
+      <div class="metadata"><span><a href="../">← Documentation</a></span><span><a href="resolved-thread.html">See resolved view</a></span><span><a href="https://github.com/aaronS7/github-comment-cli/pull/2">Open pull request</a></span><span>Head <code>16b81ff9004c</code></span><span>3 entries</span></div>
+    </header>
+    <section class="review-group"><p class="group-heading">One COMMENT review · 2 inline threads</p><article class="entry">
+    <div class="avatar" aria-hidden="true">?</div>
+    <div class="bubble">
+      <div class="bubble-header"><strong>Review summary · COMMENT</strong><span class="kind">PR review · entry 1</span></div>
+
+      <div class="markdown"><h2>Inline review example</h2>
+<p>This preview shows two comments placed on changed lines of PR #2. It is demonstration content and has not been posted.</p>
+</div>
+    </div>
+  </article><article class="entry">
+    <div class="avatar" aria-hidden="true">?</div>
+    <div class="bubble">
+      <div class="bubble-header"><strong>Inline review thread</strong><span class="kind">Files changed · entry 2</span></div>
+      <div class="location"><code>src/visual-preview.js:L151–L153</code><span class="badge">new side</span><span class="badge resolvable">Resolvable thread</span></div>
+      <div class="markdown"><p><strong>Inline comment on the status badge.</strong> This thread is attached to <a href="https://github.com/aaronS7/github-comment-cli/blob/16b81ff9004c6359a4ff6c9d569460819258940d/src/visual-preview.js#L151-L153">the location rendering</a>, so it appears in <strong>Files changed</strong> and can be resolved as one conversation.</p>
+<details>
+<summary>Why this placement matters</summary><p>A source link in the body gives readers context, while the thread directive selects the actual diff lines.</p>
+</details></div>
+    </div>
+  </article><article class="entry">
+    <div class="avatar" aria-hidden="true">?</div>
+    <div class="bubble">
+      <div class="bubble-header"><strong>Inline review thread</strong><span class="kind">Files changed · entry 3</span></div>
+      <div class="location"><code>src/visual-preview.js:L166–L168</code><span class="badge">new side</span><span class="badge resolvable">Resolvable thread</span></div>
+      <div class="markdown"><p><strong>Second inline comment.</strong> Suggested edits can appear inside a resolvable thread. This is only a formatting example:</p>
+<pre><code class="language-suggestion">      &lt;div class="markdown"&gt;${renderMarkdown(entry.body)}&lt;/div&gt;
+</code></pre>
+</div>
+    </div>
+  </article></section>
+  </main>
+</body>
+</html>

@@ -1,5 +1,7 @@
 # github-comment-cli
 
+[![Last commit](https://raw.githubusercontent.com/aaronS7/github-comment-cli/badges/last-commit.svg)](https://github.com/aaronS7/github-comment-cli/commits/main/)
+
 [Project site](https://aarons7.github.io/github-comment-cli/)
 
 Turn a Markdown file into one or more GitHub pull request comments. Write links to local source lines, include images or videos, preview the result, then publish. Code references become permanent GitHub URLs and local media become native GitHub attachments. Exact duplicate comments are skipped by default; optional similarity checks also skip near duplicates.
@@ -13,6 +15,8 @@ becomes:
 ```markdown
 Please check the [validation](https://github.com/owner/repo/blob/COMMIT_SHA/src/service.ts#L12-L18).
 ```
+
+The last-commit badge shows whole hours for commits less than 24 hours old, then whole days. GitHub Actions refreshes it on pushes to `main` and hourly, publishing the SVG to the `badges` branch.
 
 Entries post to the PR conversation by default. Add a thread directive to an entry when its feedback should appear on a diff line and be resolvable in GitHub.
 
@@ -105,6 +109,8 @@ gh-comment post review.md --pr 123
 `render` prints the converted Markdown without checking existing comments. `preview` writes a local HTML page showing each entry as a GitHub-like conversation comment, review summary, resolvable line/file thread, or reply. Open the printed file path in a browser. The page renders common GitHub-flavored Markdown, `<details>` folding, suggested-edit blocks, and local images up to 2 MiB each and 8 MiB total. Other local media show labeled placeholders; remote image URLs load in the browser. It is an approximation of GitHub's layout and does not know the eventual posting account or avatar. Without `--output`, it writes to a private temporary file and prints its path.
 
 `preview` never publishes, uploads, downloads remote media, or checks duplicates; use `post --dry-run` for planned actions and duplicate decisions. By default, `post --dry-run` resolves the PR, checks your existing comments, and previews the planned results without posting. `post` reports what it created, updated, left unchanged, or skipped.
+
+The [GitHub Pages examples](https://aarons7.github.io/github-comment-cli/#examples) show an inline review thread and an illustrative resolved conversation. The [full inline preview](https://aarons7.github.io/github-comment-cli/examples/inline-review.html) uses changed lines from PR #2; [the resolved view](https://aarons7.github.io/github-comment-cli/examples/resolved-thread.html) shows the after-state. Resolution happens in GitHub after posting and cannot be requested from Markdown.
 
 The CLI accepts a PR URL and an explicit repository:
 

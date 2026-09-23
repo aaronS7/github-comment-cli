@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="github-comment turns Markdown reports into GitHub pull request comments with verified, permanent code links and native media attachments.">
+  <meta name="description" content="github-comment turns Markdown reports into GitHub pull request comments, resolvable review threads, and visual previews with verified code links.">
   <meta name="theme-color" content="#f8f6f1">
   <title>github-comment — Markdown reports for pull requests</title>
   <style>
@@ -104,6 +104,42 @@
     .feature h3 { margin: 1px 0 8px; font-size: 1.03rem; letter-spacing: -.03em; }
     .feature p { margin: 0; color: var(--muted); font-size: .88rem; }
     .feature code { font-size: .83em; color: #225d4c; }
+    .showcase-section { padding: 100px 0; background: #f1f1ea; border-block: 1px solid var(--line); }
+    .showcase-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+    .showcase-card { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .showcase-copy { padding: 27px; }
+    .showcase-kicker { display: block; margin-bottom: 9px; color: var(--green); font-size: .7rem; font-weight: 820; letter-spacing: .1em; text-transform: uppercase; }
+    .showcase-copy h3 { margin-bottom: 9px; font-size: 1.3rem; letter-spacing: -.035em; }
+    .showcase-copy p { margin-bottom: 18px; color: var(--muted); font-size: .89rem; }
+    .showcase-code { min-height: 174px; margin: 0; padding: 17px; border-radius: 8px; background: var(--code); color: #e7f1ec; font: .74rem/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .showcase-code .dim { color: #a7c0b5; }
+    .ui-preview { flex: 1; padding: 22px; border-top: 1px solid #d9e0d9; background: #edf1ed; color: #1f2328; font-size: .83rem; }
+    .ui-label { display: block; margin-bottom: 11px; color: #536661; font-size: .68rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .ui-thread { overflow: hidden; border: 1px solid #c8d2ca; border-radius: 8px; background: #fff; }
+    .ui-location { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 13px; border-bottom: 1px solid #d9e1da; background: #f6f8f6; font-size: .72rem; }
+    .ui-location code { overflow-wrap: anywhere; }
+    .ui-pill { padding: 2px 7px; border: 1px solid #a5d6ad; border-radius: 999px; background: #e2f7e5; color: #20713c; font-size: .66rem; font-weight: 720; }
+    .ui-comment { padding: 14px 16px; }
+    .ui-comment strong { font-size: .78rem; }
+    .ui-comment p { margin: 8px 0 0; }
+    .ui-comment details { margin-top: 13px; padding: 9px 11px; border: 1px solid #d5ded6; border-radius: 6px; }
+    .ui-comment summary { cursor: pointer; font-weight: 680; }
+    .ui-resolved { border: 1px solid #c8d2ca; border-radius: 8px; background: #fff; }
+    .ui-resolved > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 10px; padding: 11px 13px; cursor: pointer; list-style: none; }
+    .ui-resolved > summary::-webkit-details-marker { display: none; }
+    .ui-resolved > summary strong { color: #20713c; }
+    .ui-resolved > summary code { color: #566760; font-size: .72rem; }
+    .ui-resolved > summary span:last-child { margin-left: auto; color: #566760; font-size: .72rem; }
+    .ui-resolved[open] > summary { border-bottom: 1px solid #d9e1da; }
+    .ui-hint { margin: 11px 0 0; color: #536661; font-size: .75rem; }
+    .showcase-link { padding: 14px 27px; border-top: 1px solid var(--line); font-size: .84rem; font-weight: 740; }
+    .showcase-link a { color: var(--green); }
+    .showcase-footer { display: grid; grid-template-columns: .85fr 1.15fr; gap: 28px; align-items: center; margin-top: 22px; padding: 24px 27px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+    .showcase-footer strong { display: block; margin-bottom: 5px; }
+    .showcase-footer p { margin: 0; color: var(--muted); font-size: .85rem; }
+    .showcase-footer .code-block { padding: 14px 17px; }
+    .showcase-more { margin: 19px 0 0; color: var(--muted); font-size: .85rem; }
+    .showcase-more a { color: var(--green); font-weight: 700; }
     .example-section { padding: 100px 0; }
     .example-grid { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 68px; align-items: start; }
     .example-grid .section-heading { margin: 0; }
@@ -129,7 +165,7 @@
     .footer-inner p { margin: 0; }
     .footer-inner a { color: #e2eee9; }
     @media (max-width: 920px) {
-      .hero-grid, .example-grid { grid-template-columns: 1fr; }
+      .hero-grid, .example-grid, .showcase-footer { grid-template-columns: 1fr; }
       .hero { padding-bottom: 72px; }
       .hero-copy { max-width: 640px; }
       .demo { max-width: 650px; transform: none; }
@@ -152,7 +188,11 @@
       .principle-grid, .feature-grid { grid-template-columns: 1fr; }
       .principle, .principle + .principle { padding: 18px 0; border-left: 0; }
       .principle + .principle { border-top: 1px solid var(--line); }
-      .section, .features-section, .example-section { padding: 68px 0; }
+      .section, .features-section, .showcase-section, .example-section { padding: 68px 0; }
+      .showcase-grid { grid-template-columns: 1fr; }
+      .showcase-copy { padding: 21px; }
+      .showcase-code { min-height: 0; }
+      .ui-preview { padding: 16px; }
       .feature { padding: 20px; }
       .callout { display: block; }
       .callout strong { display: block; margin-bottom: 6px; }
@@ -171,7 +211,7 @@
       <nav aria-label="Main navigation">
         <a href="#how-it-works">How it works</a>
         <a href="#features">Features</a>
-        <a href="#example">Example</a>
+        <a href="#examples">Examples</a>
         <a class="nav-github" href="https://github.com/aaronS7/github-comment-cli">View on GitHub ↗</a>
       </nav>
     </div>
@@ -186,7 +226,7 @@
           <p class="hero-copy">Turn a Markdown report into pull request comments, resolvable threads, or one batched review. Point to local source lines, attach images or video, and preview before publishing.</p>
           <div class="actions">
             <a class="button" href="#how-it-works">Get started&nbsp; ↗</a>
-            <a class="text-link" href="https://github.com/aaronS7/github-comment-cli#readme">Read the full documentation ↗</a>
+            <a class="text-link" href="#examples">See comment examples ↗</a>
           </div>
           <p class="hero-note">Open source · Node.js 22+ · GitHub.com pull requests</p>
         </div>
@@ -246,8 +286,8 @@ should reject empty input.</pre>
           <article class="step">
             <span class="step-number">03</span>
             <h3>Preview, then post</h3>
-            <p>Render offline, check the planned PR action, then publish to the conversation.</p>
-            <pre class="code-block">gh-comment render review.md
+            <p>Inspect the comment layout in a browser, check planned actions, then publish.</p>
+            <pre class="code-block">gh-comment preview review.md --pr 123
 gh-comment post review.md --pr 123 --dry-run
 gh-comment post review.md --pr 123</pre>
           </article>
@@ -274,6 +314,64 @@ gh-comment post review.md --pr 123</pre>
       </div>
     </section>
 
+    <section class="showcase-section" id="examples" aria-labelledby="examples-heading">
+      <div class="wrap">
+        <div class="section-heading">
+          <p class="eyebrow">Examples you can inspect</p>
+          <h2 id="examples-heading">See where the feedback lands.</h2>
+          <p>A thread directive places feedback on changed lines. The local HTML preview shows the structure before publishing; GitHub supplies the final styling and account avatar.</p>
+        </div>
+        <div class="showcase-grid">
+          <article class="showcase-card">
+            <div class="showcase-copy">
+              <span class="showcase-kicker">01 / Inline comment</span>
+              <h3>Point to the changed line.</h3>
+              <p><code>RIGHT</code> uses the new side of the diff; <code>LEFT</code> uses deleted lines on the old side. The directive sets placement and is removed from the posted body.</p>
+              <pre class="showcase-code">&lt;!-- gh-comment:thread path="src/service.ts" line="42" side="RIGHT" --&gt;
+Please handle empty input here.
+
+&lt;details&gt;
+&lt;summary&gt;Why this matters&lt;/summary&gt;
+The error would otherwise appear later.
+&lt;/details&gt;</pre>
+            </div>
+            <div class="ui-preview">
+              <span class="ui-label">Approximate Files changed view</span>
+              <div class="ui-thread">
+                <div class="ui-location"><code>src/service.ts:L42</code><span class="ui-pill">Resolvable thread</span></div>
+                <div class="ui-comment"><strong>Review comment</strong><p>Please handle empty input here.</p><details><summary>Why this matters</summary><p>The error would otherwise appear later.</p></details></div>
+              </div>
+            </div>
+            <div class="showcase-link"><a href="examples/inline-review.html">Open a full two-thread review preview ↗</a></div>
+          </article>
+          <article class="showcase-card">
+            <div class="showcase-copy">
+              <span class="showcase-kicker">02 / Resolved conversation</span>
+              <h3>Close the loop in GitHub.</h3>
+              <p>Once the feedback is addressed, the PR author or a repository writer can resolve the conversation in <strong>Files changed</strong>. There is no Markdown directive that marks a thread resolved. <a href="https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/commenting-on-a-pull-request#resolving-conversations">GitHub’s guide ↗</a></p>
+              <pre class="showcase-code"><span class="dim">After posting the inline thread:</span>
+1. Address the feedback.
+2. Select “Resolve conversation” in GitHub.
+
+The conversation collapses and is marked resolved.</pre>
+            </div>
+            <div class="ui-preview">
+              <span class="ui-label">Illustrative after-state · click to expand</span>
+              <details class="ui-resolved"><summary><strong>✓ Conversation resolved</strong><code>src/service.ts:L42</code><span>Show thread</span></summary><div class="ui-comment"><strong>Review comment</strong><p>Please handle empty input here.</p></div></details>
+              <p class="ui-hint">Resolution is a GitHub thread state, not part of the comment body.</p>
+            </div>
+            <div class="showcase-link"><a href="examples/resolved-thread.html">Open the full resolved-view illustration ↗</a></div>
+          </article>
+        </div>
+        <div class="showcase-footer">
+          <div><strong>Try it with your report</strong><p>Replace the example path and line with a changed file in your PR. <code>preview</code> validates placement without posting; the dry run checks duplicate decisions before publishing.</p></div>
+          <pre class="code-block">gh-comment preview review.md --pr 123 --output preview.html
+gh-comment post review.md --pr 123 --dry-run</pre>
+        </div>
+        <p class="showcase-more">For a review summary with several inline findings, see the <a href="https://github.com/aaronS7/github-comment-cli/blob/main/examples/batch-review.md">batch review Markdown example ↗</a>.</p>
+      </div>
+    </section>
+
     <section class="example-section" id="example">
       <div class="wrap example-grid">
         <div class="section-heading">
@@ -281,6 +379,7 @@ gh-comment post review.md --pr 123</pre>
           <h2>A workflow that fits your review.</h2>
           <p>Start with one comment. Add options only when the report needs them.</p>
           <ul>
+            <li><strong>Preview the layout:</strong> <code>preview</code> writes a local HTML page with comments and thread placement.</li>
             <li><strong>Preview decisions:</strong> <code>--dry-run</code> shows what would be created, updated, or skipped.</li>
             <li><strong>Keep one status comment:</strong> <code>--key</code> edits the same comment on later runs.</li>
             <li><strong>Make feedback resolvable:</strong> target a changed line or file, or reply to a top-level review comment.</li>
@@ -294,8 +393,8 @@ Please handle empty input here.</code></pre>
         </div>
         <div class="example-panel">
           <div class="demo-top"><span class="lights" aria-hidden="true"><i></i><i></i><i></i></span><span>terminal</span><span>EXAMPLE</span></div>
-          <pre><span class="muted"># Preview against the exact head of PR 123</span>
-gh-comment render review.md --pr 123
+          <pre><span class="muted"># Inspect the comment layout in your browser</span>
+gh-comment preview review.md --pr 123 <span class="green">--output preview.html</span>
 
 <span class="muted"># See what will happen before publishing</span>
 gh-comment post review.md --pr 123 <span class="accent">--dry-run</span>
