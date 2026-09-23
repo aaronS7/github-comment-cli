@@ -252,7 +252,7 @@ gh-comment post review.md --pr 123 --dry-run
 gh-comment post review.md --pr 123</pre>
           </article>
         </div>
-        <div class="callout"><strong>Before posting</strong><p>Commit and push the referenced code so it matches the PR head. For authenticated access, use <code>gh auth login</code>, <code>GH_TOKEN</code>, or <code>GITHUB_TOKEN</code>. Posting and the default dry run need authentication.</p></div>
+        <div class="callout"><strong>Before posting</strong><p>Commit and push the referenced code so it matches the PR head. For authenticated access, use <code>gh auth login</code>, <code>GH_TOKEN</code>, or <code>GITHUB_TOKEN</code>. The included GitHub App helper can mint a token for a bot identity; the README covers its optional setup page. Posting and the default dry run need authentication.</p></div>
       </div>
     </section>
 
@@ -265,7 +265,7 @@ gh-comment post review.md --pr 123</pre>
         </div>
         <div class="feature-grid">
           <article class="feature"><span class="feature-icon" aria-hidden="true">↗</span><div><h3>Permanent code references</h3><p>Write <code>[check](src/file.ts:42-48)</code>. The CLI checks that those lines match the selected commit, then turns the link into a permanent GitHub URL.</p></div></article>
-          <article class="feature"><span class="feature-icon" aria-hidden="true">▧</span><div><h3>Native media attachments</h3><p>Include a local Markdown image or supported video, or add one with <code>--attach</code>. The uploaded asset appears in the comment.</p></div></article>
+          <article class="feature"><span class="feature-icon" aria-hidden="true">▧</span><div><h3>Native media attachments</h3><p>With a supported user token, include a local Markdown image or video, or add one with <code>--attach</code>. The uploaded asset appears in the comment.</p></div></article>
           <article class="feature"><span class="feature-icon" aria-hidden="true">≋</span><div><h3>Multiple notes, one file</h3><p>Put <code>&lt;!-- gh-comment:next --&gt;</code> on its own line to publish separate entries in file order. Each entry can be a conversation comment or a diff thread.</p></div></article>
           <article class="feature"><span class="feature-icon" aria-hidden="true">✓</span><div><h3>Repeatable publishing</h3><p>Exact duplicate checks are on by default. Use <code>--key build-summary</code> to update one recurring comment, or opt into near duplicate checks.</p></div></article>
         </div>

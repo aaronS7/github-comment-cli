@@ -44,17 +44,19 @@ npm run mint-app-token
 
 It prompts for the App Client ID, private-key `.pem` file location, and target repository. The repository default comes from the `origin` remote when available; enter a different repository if needed. The helper writes the short-lived installation token to `.env` as `GH_TOKEN`, preserving other entries and restricting the file to owner-only permissions.
 
-#### Configure through the setup page
+#### Optional setup page for App defaults
 
-From this checkout, start the server and open <http://localhost:4179>:
+The page only saves optional default values for the App Client ID, private-key path, and repository. `npm run mint-app-token` also works on its own and prompts for these values.
+
+For HTTP loopback access, start the server from this checkout and open <http://localhost:4179>. Disable the `Secure` cookie for this HTTP session so browsers including Safari retain it:
 
 ```sh
-npm run app-config-ui
+GH_APP_CONFIG_SECURE_COOKIE=false npm run app-config-ui
 ```
 
 On the host, run `npm run app-config-ui:code` in another terminal to display the access code. The page asks for the App Client ID, private-key path, and default repository, then saves `GH_APP_CLIENT_ID`, `GH_APP_PRIVATE_KEY_FILE`, and `GH_REPO` to this checkout's `.env`. It does not serve `.env` or read the private key contents. After saving, run `npm run mint-app-token` to mint a one-hour `GH_TOKEN`.
 
-For access from another device on your tailnet, keep the server bound to localhost and run `tailscale serve --bg 4179` on the host. Open the HTTPS URL it prints. The setup page keeps its default `Secure` session cookie; see [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) for setup. If you instead bind the server directly to a private Tailscale address and use HTTP, set `GH_APP_CONFIG_HOSTS` to that address and `GH_APP_CONFIG_SECURE_COOKIE=false` before starting it; browsers otherwise reject the `Secure` cookie on a non-localhost HTTP URL. Use HTTPS for remote access when possible.
+For access from another device on your tailnet, start the server with `npm run app-config-ui` (without the HTTP cookie override), keep it bound to localhost, and run `tailscale serve --bg 4179` on the host. Open the HTTPS URL it prints. This keeps the default `Secure` session cookie; see [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) for setup. If you instead bind the server directly to a private Tailscale address and use HTTP, set `GH_APP_CONFIG_HOSTS` to that address and `GH_APP_CONFIG_SECURE_COOKIE=false` before starting it; browsers otherwise reject the `Secure` cookie on an HTTP URL. Use HTTPS for remote access when possible.
 
 Load those credentials into the current shell when you want to use `gh-comment`:
 

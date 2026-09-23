@@ -7,7 +7,7 @@ The CLI targets GitHub.com pull requests. It supports conversation comments and 
 ## Documentation
 
 - [README](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/README.md): install, authentication, Markdown syntax, configuration, attachments, duplicate checks, keyed updates, Actions, and development
-- [Agent Skill](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/.agents/skills/github-comment-cli/SKILL.md): procedure for preparing and safely publishing a PR conversation comment
+- [Agent Skill](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/.agents/skills/github-comment-cli/SKILL.md): procedure for preparing and safely publishing PR conversation comments and resolvable review threads
 - [Project site](https://aarons7.github.io/github-comment-cli/): human-oriented introduction and quick start
 
 ## Examples
