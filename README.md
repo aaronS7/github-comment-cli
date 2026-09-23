@@ -24,17 +24,26 @@ Entries post to the PR conversation by default. Add a thread directive to an ent
 
 The repository includes [`llms.txt`](llms.txt) as a compact map of its documentation and implementation, plus a [GitHub PR comments skill](.agents/skills/github-comment-cli/SKILL.md) with an agent workflow for drafting, previewing, and publishing comments.
 
-## Install from source
+## Install
 
-Requires Node.js 22 or newer and Git. From this project's directory:
+The npm package requires Node.js 22 or newer and Git:
+
+```sh
+npm install --global github-comment-cli
+gh-comment --help
+```
+
+The executable is `gh-comment`; the package is `github-comment-cli`.
+
+For a standalone executable without a Node.js installation, download the archive for your OS and CPU from the [latest GitHub release](https://github.com/aaronS7/github-comment-cli/releases/latest) and extract it with `tar -xzf <archive>`. On Linux or macOS, mark the extracted file executable with `chmod +x` if needed; on Windows, use the extracted `.exe`. Git must still be installed. Each release includes SHA-256 checksum files for its archives.
+
+To install from this project's source directory instead:
 
 ```sh
 npm ci
 npm install --global .
 gh-comment --help
 ```
-
-The executable is `gh-comment`; the package is `github-comment-cli`. This project has not been published to npm yet.
 
 For authenticated GitHub access, the CLI checks `GH_TOKEN`, then `GITHUB_TOKEN`, then an existing GitHub CLI login (`gh auth token`). If you use GitHub CLI, run `gh auth login` once. Offline rendering needs no token; public PR metadata can be read without one. Publication requires a token with pull request write access to the target repository. See GitHub's [comment API permissions](https://docs.github.com/en/rest/issues/comments#create-an-issue-comment).
 
@@ -425,7 +434,7 @@ Attachment plans include an `attachments` array. Each prepared attachment identi
 
 ## GitHub Actions
 
-The CLI already accepts `GITHUB_TOKEN` and PR event metadata. [examples/github-actions.yml](examples/github-actions.yml) demonstrates a recurring comment from this repository's source checkout; it is an example, not an enabled publishing workflow. Once the CLI is published, the installation step can use a pinned package release from another repository.
+The CLI accepts `GITHUB_TOKEN` and PR event metadata. [examples/github-actions.yml](examples/github-actions.yml) demonstrates a recurring comment from this repository's source checkout; it is an example, not an enabled publishing workflow. Other repositories can install a pinned package version with `npm install --global github-comment-cli@0.1.0`.
 
 For new native attachments, use a supported user token with push access through a secret such as `GH_TOKEN: ${{ secrets.COMMENT_UPLOAD_TOKEN }}`. The built-in Actions token remains suitable for text comments and already-hosted media; it does not support native asset uploads. Attachment reuse metadata in posted comments works across separate runners.
 
@@ -447,5 +456,7 @@ npm test
 ```
 
 Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
+
+Building a standalone executable requires Node.js 26 or newer. Run `npm run build:binary` on the target OS and CPU, then `npm run smoke:binary`. The binary and its compressed release archive are written to `dist/` with a matching SHA-256 checksum file for the archive. Pushing a `v<package-version>` tag builds and tests the release binaries on GitHub-hosted runners before publishing them.
 
 Current scope is GitHub.com PR conversation comments, resolvable line and file threads, replies, batched reviews with explicit review decisions, Markdown source links, native image/video attachments, multiple entries, duplicate checks, and one-comment conversation updates. Resolving threads, issue-specific commands, and a packaged GitHub Action remain outside this interface.

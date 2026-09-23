@@ -262,17 +262,15 @@ should reject empty input.</pre>
         <div class="section-heading">
           <p class="eyebrow">The first five minutes</p>
           <h2>From a local file to a useful PR comment.</h2>
-          <p>Install the CLI from this repository, write a report in the code checkout, and see exactly what GitHub will receive before you post.</p>
+          <p>Install the CLI, write a report in the code checkout, and see exactly what GitHub will receive before you post.</p>
         </div>
         <div class="steps">
           <article class="step">
             <span class="step-number">01</span>
-            <h3>Install from source</h3>
-            <p>Node.js 22 or newer and Git are required. The package is not on npm yet.</p>
-            <pre class="code-block">git clone https://github.com/aaronS7/github-comment-cli.git
-cd github-comment-cli
-npm ci
-npm install --global .</pre>
+            <h3>Install the CLI</h3>
+            <p>Install from npm with Node.js 22 or newer. Git is also required. <a href="https://github.com/aaronS7/github-comment-cli/releases/latest">Standalone binaries</a> are available if you prefer not to install Node.js.</p>
+            <pre class="code-block">npm install --global github-comment-cli
+gh-comment --help</pre>
           </article>
           <article class="step">
             <span class="step-number">02</span>

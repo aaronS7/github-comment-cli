@@ -1,0 +1,67 @@
+name: Release binaries
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-x64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: windows-2025
+            target: windows-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run build:binary -- ${{ matrix.target }}
+      - run: npm run smoke:binary
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gh-comment-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gh-comment-*
+          path: dist
+          merge-multiple: true
+      - name: Verify checksums
+        run: cd dist && sha256sum --check *.tar.gz.sha256
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_NOTES: |
+            Install the Node.js package with `npm install --global github-comment-cli` (Node.js 22+ and Git required).
+
+            Or download the standalone archive for your OS and CPU below, extract it with `tar -xzf <archive>`, and run the contained binary. The binary does not need Node.js; Git is still required. On Linux or macOS, run `chmod +x <binary>` if needed. Each archive has a matching `.sha256` checksum file.
+        run: gh release create "$GITHUB_REF_NAME" dist/*.tar.gz dist/*.sha256 --verify-tag --title "$GITHUB_REF_NAME" --notes "$RELEASE_NOTES" --generate-notes
