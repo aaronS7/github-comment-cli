@@ -23,6 +23,7 @@ async function fixture(t) {
   await writeFile(imageFile, PNG);
   await writeFile(reportFile, `Review screenshot.\n\n${image}\n`);
   const comments = [];
+  const reviewComments = [];
   const uploads = [];
   const calls = [];
   const viewer = { id: 42, login: 'tester' };
@@ -30,6 +31,7 @@ async function fixture(t) {
     async getPull() { calls.push('getPull'); return { number: 12, head: { sha: SHA, ref: 'feature', repo: { full_name: 'example/project' } } }; },
     async getViewer() { calls.push('getViewer'); return viewer; },
     async listComments() { calls.push('listComments'); return comments.map(comment => ({ ...comment })); },
+    async listReviewComments() { calls.push('listReviewComments'); return reviewComments.map(comment => ({ ...comment })); },
     async preflightAttachmentUpload(repo) { calls.push('preflight'); assert.equal(repo, 'example/project'); return { id: 321, permissions: { push: true } }; },
     async uploadAttachment(repo, asset) {
       calls.push('upload');
@@ -71,7 +73,7 @@ async function fixture(t) {
     });
     return { status, stdout, stderr, result: status === 0 ? JSON.parse(stdout) : undefined };
   }
-  return { root, imageFile, reportFile, comments, uploads, calls, github, invoke,
+  return { root, imageFile, reportFile, comments, reviewComments, uploads, calls, github, invoke,
     writeReport: value => writeFile(reportFile, value), writes: () => calls.filter(call => ['upload', 'create', 'update'].includes(call)) };
 }
 
@@ -112,6 +114,21 @@ test('rerunning a report recognizes hashes and skips without more uploads or com
   assert.equal(repeated.result.attachments[0].url, assetUrl(1));
   assert.equal(f.uploads.length, 1);
   assert.equal(f.comments.length, 1);
+});
+
+test('a conversation comment reuses an asset previously posted in a review thread', async t => {
+  const f = await fixture(t);
+  assert.equal((await f.invoke()).status, 0);
+  f.reviewComments.push(f.comments.pop());
+  await f.writeReport(`A different finding.\n\n${image}\n`);
+
+  const output = await f.invoke();
+  assert.equal(output.status, 0, output.stderr);
+  assert.equal(output.result.comments[0].action, 'created');
+  assert.equal(output.result.attachments[0].action, 'reused');
+  assert.equal(f.uploads.length, 1);
+  assert.match(f.comments[0].body, new RegExp(assetUrl(1)));
+  assert.ok(f.calls.includes('listReviewComments'));
 });
 
 test('a different report and filename reuse the same uploaded bytes', async t => {

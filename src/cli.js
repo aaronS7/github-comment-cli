@@ -7,6 +7,7 @@ import { hasKeyMarker, renderMarkdown, SEPARATOR, validateBody } from './markdow
 import { loadConfig } from './config.js';
 import { describeDecision, planPublication, publish } from './publish.js';
 import { Attachments } from './attachments.js';
+import { validateThreadTargets } from './review-threads.js';
 
 export { publish } from './publish.js';
 
@@ -18,7 +19,7 @@ Usage:
 
 Commands:
   render       Print validated Markdown. Offline unless --pr is supplied.
-  post         Publish to the PR conversation, or update one comment with --key.
+  post         Publish PR conversation comments or resolvable diff threads.
 
 Options:
   --pr <number|url>  Pull request; post can infer it from branch or Actions event
@@ -42,10 +43,12 @@ Options:
 Write [label](src/file.ts:42-48) or [label](src/file.ts#L42-L48).
 Paths are relative to the repository root, or absolute inside the checkout.
 Separate comments with a standalone ${SEPARATOR}.
+Start an entry with <!-- gh-comment:thread path="src/file.ts" line="42-48" side="RIGHT" -->
+to post a resolvable diff thread. Use LEFT for deleted lines. A thread needs a PR.
 Local Markdown images/media are uploaded; paths are relative to the report file.
 Code blocks and inline code stay literal. Referenced code must match the commit.
 Authenticate with GH_TOKEN, GITHUB_TOKEN, or gh auth login.
-Duplicate checks require authentication, including post --dry-run.
+Duplicate checks require authentication, including the default post --dry-run.
 Similar matching is opt-in. --key updates changed content regardless of similarity.
 CLI options override config settings; the threshold applies only to similar mode.
 `;
@@ -143,6 +146,11 @@ export async function prepare(options, { cwd = process.cwd(), env = process.env,
   }
   const rendered = !source.trim() && options.attach?.length ? [{ body: '' }]
     : await renderMarkdown(source, async target => (await getRepository()).resolveReference(target, { sha, repo: linkRepo }));
+  if (rendered.some(entry => entry.kind === 'thread')) {
+    if (!context) throw new Error('Review threads require a pull request. Pass --pr to render.');
+    if (options.key !== undefined) throw new Error('--key cannot be used with review threads. Remove --key or publish a conversation comment.');
+    await validateThreadTargets(rendered, { github: context.github, repo, pr: context.number, pull: context.pull });
+  }
   const attachments = new Attachments({
     cwd,
     baseDir: options['attachment-base'] ? path.resolve(cwd, options['attachment-base'])
@@ -173,6 +181,12 @@ export function preview(plan) {
     ...(plan.attachments?.active || plan.attachments?.pending.length ? { attachments: plan.attachments.describe(plan.comments.map(entry => ({ ...entry, action: 'created' }))) } : {}) };
 }
 
+function displayBody(entry) {
+  if (entry.kind !== 'thread') return entry.body;
+  const range = entry.startLine === entry.line ? entry.line : `${entry.startLine}-${entry.line}`;
+  return `<!-- gh-comment:thread path="${entry.path}" line="${range}" side="${entry.side}" -->\n\n${entry.body}`;
+}
+
 export async function main(argv = process.argv.slice(2), io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const stderr = io.stderr ?? process.stderr;
@@ -185,13 +199,13 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   try {
     plan = await prepare(options, io);
     if (options.command === 'render') {
-      stdout.write(options.json ? `${JSON.stringify(preview(plan), null, 2)}\n` : `${plan.comments.map(entry => entry.body).join(`\n\n${SEPARATOR}\n\n`)}\n`);
+      stdout.write(options.json ? `${JSON.stringify(preview(plan), null, 2)}\n` : `${plan.comments.map(displayBody).join(`\n\n${SEPARATOR}\n\n`)}\n`);
     } else if (options['dry-run']) {
       const result = await planPublication(plan);
       if (plan.attachments?.active) result.comments = result.comments.map(entry => ({ ...entry, body: plan.attachments.materialize(entry.body, { preview: true }) }));
       if (options.json) stdout.write(`${JSON.stringify(result, null, 2)}\n`);
       else {
-        stdout.write(`${result.comments.map(entry => entry.body).join(`\n\n${SEPARATOR}\n\n`)}\n`);
+        stdout.write(`${result.comments.map(displayBody).join(`\n\n${SEPARATOR}\n\n`)}\n`);
         result.comments.forEach((entry, index) => stderr.write(`${describeDecision(entry, index, { dryRun: true })}\n`));
       }
     } else {

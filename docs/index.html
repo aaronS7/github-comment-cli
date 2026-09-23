@@ -183,7 +183,7 @@
         <div>
           <p class="eyebrow">A small CLI for thoughtful reviews</p>
           <h1>Write the comment. <em>Keep the context.</em></h1>
-          <p class="hero-copy">Turn a Markdown report into pull request conversation comments. Point to local source lines, attach images or video, preview the result, and publish links pinned to the PR’s exact commit.</p>
+          <p class="hero-copy">Turn a Markdown report into pull request comments or resolvable diff threads. Point to local source lines, attach images or video, and preview before publishing.</p>
           <div class="actions">
             <a class="button" href="#how-it-works">Get started&nbsp; ↗</a>
             <a class="text-link" href="https://github.com/aaronS7/github-comment-cli#readme">Read the full documentation ↗</a>
@@ -211,7 +211,7 @@ should reject empty input.</pre>
 
     <div class="principles" aria-label="At a glance">
       <div class="wrap principle-grid">
-        <div class="principle"><strong>Markdown in, comments out</strong><p>Draft the report in a file, then publish it to the PR conversation.</p></div>
+        <div class="principle"><strong>Markdown in, comments out</strong><p>Publish to the PR conversation or target a resolvable diff thread.</p></div>
         <div class="principle"><strong>Links that stay put</strong><p>Local line references become verified URLs pinned to the PR head.</p></div>
         <div class="principle"><strong>Safe to rerun</strong><p>Exact duplicates are skipped; keyed reports update one comment.</p></div>
       </div>
@@ -252,7 +252,7 @@ gh-comment post review.md --pr 123 --dry-run
 gh-comment post review.md --pr 123</pre>
           </article>
         </div>
-        <div class="callout"><strong>Before posting</strong><p>Commit and push the referenced code so it matches the PR head. For authenticated access, use <code>gh auth login</code>, <code>GH_TOKEN</code>, or <code>GITHUB_TOKEN</code>. Posting and its dry run need authentication.</p></div>
+        <div class="callout"><strong>Before posting</strong><p>Commit and push the referenced code so it matches the PR head. For authenticated access, use <code>gh auth login</code>, <code>GH_TOKEN</code>, or <code>GITHUB_TOKEN</code>. Posting and the default dry run need authentication.</p></div>
       </div>
     </section>
 
@@ -266,7 +266,7 @@ gh-comment post review.md --pr 123</pre>
         <div class="feature-grid">
           <article class="feature"><span class="feature-icon" aria-hidden="true">↗</span><div><h3>Permanent code references</h3><p>Write <code>[check](src/file.ts:42-48)</code>. The CLI checks that those lines match the selected commit, then turns the link into a permanent GitHub URL.</p></div></article>
           <article class="feature"><span class="feature-icon" aria-hidden="true">▧</span><div><h3>Native media attachments</h3><p>Include a local Markdown image or supported video, or add one with <code>--attach</code>. The uploaded asset appears in the comment.</p></div></article>
-          <article class="feature"><span class="feature-icon" aria-hidden="true">≋</span><div><h3>Multiple notes, one file</h3><p>Put <code>&lt;!-- gh-comment:next --&gt;</code> on its own line to publish separate conversation comments in file order.</p></div></article>
+          <article class="feature"><span class="feature-icon" aria-hidden="true">≋</span><div><h3>Multiple notes, one file</h3><p>Put <code>&lt;!-- gh-comment:next --&gt;</code> on its own line to publish separate entries in file order. Each entry can be a conversation comment or a diff thread.</p></div></article>
           <article class="feature"><span class="feature-icon" aria-hidden="true">✓</span><div><h3>Repeatable publishing</h3><p>Exact duplicate checks are on by default. Use <code>--key build-summary</code> to update one recurring comment, or opt into near duplicate checks.</p></div></article>
         </div>
       </div>
@@ -281,8 +281,12 @@ gh-comment post review.md --pr 123</pre>
           <ul>
             <li><strong>Preview decisions:</strong> <code>--dry-run</code> shows what would be created, updated, or skipped.</li>
             <li><strong>Keep one status comment:</strong> <code>--key</code> edits the same comment on later runs.</li>
+            <li><strong>Make feedback resolvable:</strong> start an entry with a thread directive targeting a changed line in the PR diff.</li>
             <li><strong>Automate:</strong> <code>--json</code> gives scripts structured results, and a GitHub Actions example is included.</li>
           </ul>
+          <pre class="code-block"><code>&lt;!-- gh-comment:thread path="src/file.ts" line="42" side="RIGHT" --&gt;
+Please handle empty input here.</code></pre>
+          <p><a class="text-link" href="https://github.com/aaronS7/github-comment-cli#resolvable-review-threads">Review thread syntax and limits ↗</a></p>
           <a class="text-link" href="https://github.com/aaronS7/github-comment-cli/tree/main/examples">Browse examples ↗</a>
         </div>
         <div class="example-panel">
@@ -306,7 +310,7 @@ gh-comment post review.md --pr 123 \
 
     <section class="reference" aria-labelledby="reference-heading">
       <div class="wrap reference-grid">
-        <div><h2 id="reference-heading">Ready to write your first report?</h2><p>The README covers every option, authentication, attachment limits, configuration, and GitHub Actions setup. This release posts PR conversation comments; inline diff review threads are planned for later.</p></div>
+        <div><h2 id="reference-heading">Ready to write your first report?</h2><p>The README covers conversation comments, resolvable diff threads, authentication, attachments, configuration, and GitHub Actions setup.</p></div>
         <a class="button" href="https://github.com/aaronS7/github-comment-cli#readme">Open the README&nbsp; ↗</a>
       </div>
     </section>
