@@ -7,7 +7,7 @@ import { hasKeyMarker, renderMarkdown, SEPARATOR, validateBody } from './markdow
 import { loadConfig } from './config.js';
 import { describeDecision, planPublication, publish } from './publish.js';
 import { Attachments } from './attachments.js';
-import { validateThreadTargets } from './review-threads.js';
+import { validateReplyTargets, validateReviewTargets } from './review-threads.js';
 
 export { publish } from './publish.js';
 
@@ -19,7 +19,7 @@ Usage:
 
 Commands:
   render       Print validated Markdown. Offline unless --pr is supplied.
-  post         Publish PR conversation comments or resolvable diff threads.
+  post         Publish PR comments, resolvable threads, replies, or a batch review.
 
 Options:
   --pr <number|url>  Pull request; post can infer it from branch or Actions event
@@ -45,6 +45,11 @@ Paths are relative to the repository root, or absolute inside the checkout.
 Separate comments with a standalone ${SEPARATOR}.
 Start an entry with <!-- gh-comment:thread path="src/file.ts" line="42-48" side="RIGHT" -->
 to post a resolvable diff thread. Use LEFT for deleted lines. A thread needs a PR.
+Use <!-- gh-comment:file path="src/file.ts" --> for a changed-file thread, or
+<!-- gh-comment:reply id="123456789" --> to reply to a top-level review comment.
+Start a report with <!-- gh-comment:review event="COMMENT" --> to submit its
+summary and following line threads as one review. APPROVE and REQUEST_CHANGES
+require explicit events. Review reports cannot mix in other entry kinds.
 Local Markdown images/media are uploaded; paths are relative to the report file.
 Code blocks and inline code stay literal. Referenced code must match the commit.
 Authenticate with GH_TOKEN, GITHUB_TOKEN, or gh auth login.
@@ -146,10 +151,11 @@ export async function prepare(options, { cwd = process.cwd(), env = process.env,
   }
   const rendered = !source.trim() && options.attach?.length ? [{ body: '' }]
     : await renderMarkdown(source, async target => (await getRepository()).resolveReference(target, { sha, repo: linkRepo }));
-  if (rendered.some(entry => entry.kind === 'thread')) {
-    if (!context) throw new Error('Review threads require a pull request. Pass --pr to render.');
-    if (options.key !== undefined) throw new Error('--key cannot be used with review threads. Remove --key or publish a conversation comment.');
-    await validateThreadTargets(rendered, { github: context.github, repo, pr: context.number, pull: context.pull });
+  if (rendered.some(entry => entry.kind)) {
+    if (!context) throw new Error('Review threads, file comments, replies, and reviews require a pull request. Pass --pr to render.');
+    if (options.key !== undefined) throw new Error('--key is only available for one PR conversation comment.');
+    await validateReviewTargets(rendered, { github: context.github, repo, pr: context.number, pull: context.pull });
+    await validateReplyTargets(rendered, { github: context.github, repo, pr: context.number });
   }
   const attachments = new Attachments({
     cwd,
@@ -182,9 +188,14 @@ export function preview(plan) {
 }
 
 function displayBody(entry) {
-  if (entry.kind !== 'thread') return entry.body;
-  const range = entry.startLine === entry.line ? entry.line : `${entry.startLine}-${entry.line}`;
-  return `<!-- gh-comment:thread path="${entry.path}" line="${range}" side="${entry.side}" -->\n\n${entry.body}`;
+  let directive;
+  if (entry.kind === 'thread') {
+    const range = entry.startLine === entry.line ? entry.line : `${entry.startLine}-${entry.line}`;
+    directive = `<!-- gh-comment:thread path="${entry.path}" line="${range}" side="${entry.side}" -->`;
+  } else if (entry.kind === 'file') directive = `<!-- gh-comment:file path="${entry.path}" -->`;
+  else if (entry.kind === 'reply') directive = `<!-- gh-comment:reply id="${entry.parentId}" -->`;
+  else if (entry.kind === 'review') directive = `<!-- gh-comment:review event="${entry.event}" -->`;
+  return directive ? `${directive}\n\n${entry.body}` : entry.body;
 }
 
 export async function main(argv = process.argv.slice(2), io = {}) {

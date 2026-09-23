@@ -90,6 +90,35 @@ test('a leading thread directive sets placement without entering the comment bod
   await assert.rejects(renderMarkdown('Preface.\n\n<!-- gh-comment:thread path="src/file.js" line="12" side="RIGHT" -->\nCheck.', fixedResolver), /before the comment body/);
 });
 
+test('review, file, and reply directives keep placement separate from Markdown bodies', async () => {
+  const batch = `<!-- gh-comment:review event="COMMENT" -->\nSummary [source](src/file.js:2).\n\n${SEPARATOR}\n\n<!-- gh-comment:thread path="src/file.js" line="2" side="RIGHT" -->\n\`\`\`suggestion\nreturn value;\n\`\`\``;
+  assert.deepEqual(await renderMarkdown(batch, fixedResolver), [
+    { kind: 'review', event: 'COMMENT', body: `Summary [source](${URL}).` },
+    { kind: 'thread', path: 'src/file.js', startLine: 2, line: 2, side: 'RIGHT', body: '```suggestion\nreturn value;\n```' },
+  ]);
+  assert.deepEqual(await renderMarkdown(`<!-- gh-comment:file path="src/file.js" -->\nCheck the file.\n\n${SEPARATOR}\n\n<!-- gh-comment:reply id="123456789" -->\nAgreed.`, fixedResolver), [
+    { kind: 'file', path: 'src/file.js', body: 'Check the file.' },
+    { kind: 'reply', parentId: 123456789, body: 'Agreed.' },
+  ]);
+  for (const event of ['APPROVE', 'REQUEST_CHANGES']) {
+    assert.equal((await renderMarkdown(`<!-- gh-comment:review event="${event}" -->\nSummary.`, fixedResolver))[0].event, event);
+  }
+});
+
+test('new directives reject malformed placement, events, paths, parents, and mixed batch reports', async () => {
+  for (const source of [
+    '<!-- gh-comment:review event="PENDING" -->\nSummary.',
+    '<!-- gh-comment:file path="../outside.js" -->\nCheck.',
+    '<!-- gh-comment:reply id="0" -->\nReply.',
+    '<!-- gh-comment:reply id="9007199254740992" -->\nReply.',
+  ]) await assert.rejects(renderMarkdown(source, fixedResolver), /invalid .* directive/);
+  await assert.rejects(renderMarkdown('Text.\n\n<!-- gh-comment:file path="src/file.js" -->', fixedResolver), /before the comment body/);
+  await assert.rejects(renderMarkdown(`<!-- gh-comment:review event="COMMENT" -->\nSummary.\n\n${SEPARATOR}\n\nConversation.`, fixedResolver), /separate report/);
+  await assert.rejects(renderMarkdown(`<!-- gh-comment:review event="COMMENT" -->\nSummary.\n\n${SEPARATOR}\n\n<!-- gh-comment:reply id="1" -->\nReply.`, fixedResolver), /separate report/);
+  assert.deepEqual(await renderMarkdown('```md\n<!-- gh-comment:file path="src/file.js" -->\n```', fixedResolver),
+    [{ body: '```md\n<!-- gh-comment:file path="src/file.js" -->\n```' }]);
+});
+
 test('rejects invalid local line numbers with Markdown source location', async () => {
   for (const target of ['src/file.js:0', 'src/file.js:3-2', 'src/file.js#L0', 'src/file.js#L4-L2']) {
     await assert.rejects(renderMarkdown(`Heading\n\n[bad](${target})`, fixedResolver), /Markdown line 3: Invalid line range/);

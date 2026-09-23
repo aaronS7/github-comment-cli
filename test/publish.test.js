@@ -7,9 +7,10 @@ const SHA = 'a'.repeat(40);
 const VIEWER = { id: 42, login: 'reviewer' };
 const commentUrl = id => `https://github.com/example/project/pull/12#issuecomment-${id}`;
 
-function fixture({ comments = [], reviewComments = [], bodies = ['Report'], settings, marker, overrides = {} } = {}) {
+function fixture({ comments = [], reviewComments = [], reviews = [], bodies = ['Report'], settings, marker, overrides = {} } = {}) {
   const remote = comments.map(comment => ({ ...comment }));
   const remoteReview = reviewComments.map(comment => ({ ...comment }));
+  const remoteReviews = reviews.map(review => ({ ...review }));
   const calls = [];
   let nextId = 1000;
   const github = {
@@ -18,6 +19,11 @@ function fixture({ comments = [], reviewComments = [], bodies = ['Report'], sett
     async getViewer() { calls.push({ method: 'getViewer' }); return VIEWER; },
     async listComments(repo, pr) { calls.push({ method: 'listComments', repo, pr }); return remote.map(comment => ({ ...comment })); },
     async listReviewComments(repo, pr) { calls.push({ method: 'listReviewComments', repo, pr }); return remoteReview.map(comment => ({ ...comment })); },
+    async listReviews(repo, pr) { calls.push({ method: 'listReviews', repo, pr }); return remoteReviews.map(review => ({ ...review })); },
+    async listReviewCommentsForReview(repo, pr, reviewId) {
+      calls.push({ method: 'listReviewCommentsForReview', repo, pr, reviewId });
+      return remoteReview.filter(comment => comment.pull_request_review_id === reviewId).map(comment => ({ ...comment }));
+    },
     async getPull(repo, pr) { calls.push({ method: 'getPull', repo, pr }); return { number: pr, head: { sha: SHA } }; },
     async createComment(repo, pr, body) {
       calls.push({ method: 'createComment', repo, pr, body });
@@ -32,17 +38,50 @@ function fixture({ comments = [], reviewComments = [], bodies = ['Report'], sett
       existing.body = body;
       return { ...existing };
     },
+    async createReviewComment(repo, pr, entry, body, sha) {
+      calls.push({ method: 'createReviewComment', repo, pr, entry, body, sha });
+      const comment = { ...ownReview(body, entry.line, nextId++), path: entry.path, side: entry.side, start_line: entry.startLine };
+      remoteReview.push(comment);
+      return { ...comment };
+    },
+    async createFileComment(repo, pr, entry, body, sha) {
+      calls.push({ method: 'createFileComment', repo, pr, entry, body, sha });
+      const comment = { ...own(body, nextId++), path: entry.path, subject_type: 'file', line: null, position: null };
+      remoteReview.push(comment);
+      return { ...comment };
+    },
+    async createReviewReply(repo, pr, parentId, body) {
+      calls.push({ method: 'createReviewReply', repo, pr, parentId, body });
+      const comment = { ...own(body, nextId++), in_reply_to_id: parentId };
+      remoteReview.push(comment);
+      return { ...comment };
+    },
+    async createReview(repo, pr, body) {
+      calls.push({ method: 'createReview', repo, pr, body });
+      const review = { ...own(body.body, nextId++), state: { COMMENT: 'COMMENTED', APPROVE: 'APPROVED', REQUEST_CHANGES: 'CHANGES_REQUESTED' }[body.event], commit_id: body.commit_id };
+      remoteReviews.push(review);
+      for (const entry of body.comments) {
+        remoteReview.push({ ...own(entry.body, nextId++), path: entry.path, side: entry.side,
+          line: entry.line, start_line: entry.start_line ?? entry.line, position: 1, pull_request_review_id: review.id });
+      }
+      return { ...review };
+    },
     ...overrides,
   };
   const plan = { repo: 'example/project', pr: 12, sha: SHA, context: { github },
     comments: bodies.map(body => ({ body })), marker,
     settings: { dedupe: 'exact', similarityThreshold: 0.96, ...settings },
   };
-  return { plan, github, remote, calls, writes: () => calls.filter(call => ['createComment', 'updateComment'].includes(call.method)) };
+  return { plan, github, remote, remoteReview, remoteReviews, calls,
+    writes: () => calls.filter(call => ['createComment', 'updateComment', 'createReviewComment', 'createFileComment', 'createReviewReply', 'createReview'].includes(call.method)) };
 }
 
 function thread(body, line = 12) {
   return { kind: 'thread', path: 'src/file.js', side: 'RIGHT', startLine: line, line, body };
+}
+
+function batch(body = 'Review summary', event = 'COMMENT', threads = [thread('Check this line')]) {
+  return [{ kind: 'review', event, body }, ...threads];
 }
 
 function ownReview(body, line = 12, id = 200) {
@@ -71,6 +110,113 @@ test('review duplicates require the same file, side, and line range', async () =
   assert.deepEqual(result.comments.map(entry => entry.action), ['skipped', 'created']);
   assert.equal(result.comments[0].id, 200);
   assert.deepEqual(f.calls.filter(call => call.method.startsWith('list')).map(call => call.method), ['listReviewComments']);
+});
+
+test('file comments and replies deduplicate only at their own placement', async () => {
+  const f = fixture({ bodies: [], reviewComments: [
+    { ...ownReview('Check the file', 12, 200), subject_type: 'line' },
+    { ...own('Check the file', 201), path: 'src/file.js', subject_type: 'file', line: null, position: null },
+    { ...own('Agreed', 202), in_reply_to_id: 200 },
+  ] });
+  f.plan.comments = [
+    { kind: 'file', path: 'src/file.js', body: 'Check the file' },
+    { kind: 'file', path: 'src/other.js', body: 'Check the file' },
+    { kind: 'reply', parentId: 200, body: 'Agreed' },
+    { kind: 'reply', parentId: 201, body: 'Agreed' },
+  ];
+  const result = await publish(f.plan);
+  assert.deepEqual(result.comments.map(entry => entry.action), ['skipped', 'created', 'skipped', 'created']);
+  assert.equal(result.comments[0].id, 201);
+  assert.equal(result.comments[2].id, 202);
+  assert.deepEqual(f.writes().map(call => call.method), ['createFileComment', 'createReviewReply']);
+  assert.equal(result.comments[3].parentId, 201);
+});
+
+test('file dedupe fails closed when GitHub omits a possible file comment subject type', async () => {
+  const f = fixture({ bodies: [], reviewComments: [{ ...own('Note', 200), path: 'src/file.js', line: null, position: null }] });
+  f.plan.comments = [{ kind: 'file', path: 'src/file.js', body: 'Note' }];
+  await assert.rejects(planPublication(f.plan), /omitted file-level review comment metadata/);
+  assert.equal(f.writes().length, 0);
+});
+
+test('a batch review submits only new threads in one API request and reruns cleanly', async () => {
+  const f = fixture({ bodies: [], reviewComments: [ownReview('Existing finding', 12, 200)] });
+  f.plan.comments = batch('Summary with a [link](https://example.com).', 'COMMENT', [
+    thread('Existing finding', 12), thread('New finding', 13), thread('New finding', 13),
+  ]);
+  const preview = await planPublication(f.plan);
+  assert.deepEqual(preview.comments.map(entry => entry.action), ['created', 'skipped', 'created', 'skipped']);
+  assert.deepEqual(preview.writes, [{ operation: 'submitReview', event: 'COMMENT', commentIndexes: [1, 3] }]);
+  const result = await publish(f.plan);
+  assert.deepEqual(f.writes().map(call => call.method), ['createReview']);
+  assert.equal(f.writes()[0].body.comments.length, 1);
+  assert.equal(f.writes()[0].body.comments[0].line, 13);
+  assert.equal(result.comments[1].id, 200);
+  assert.equal(result.comments[2].reviewId, result.comments[0].id);
+  assert.equal(result.comments[3].url, result.comments[2].url);
+  const rerun = await publish(f.plan);
+  assert.deepEqual(rerun.comments.map(entry => entry.action), ['skipped', 'skipped', 'skipped', 'skipped']);
+  assert.equal(rerun.comments[0].id, result.comments[0].id);
+  assert.equal(f.writes().length, 1);
+});
+
+test('an identical summary still submits a review when a new inline finding remains', async () => {
+  const f = fixture({ bodies: [], reviews: [{ ...own('Summary', 300), state: 'COMMENTED', commit_id: SHA }] });
+  f.plan.comments = batch('Summary', 'COMMENT', [thread('Fresh finding')]);
+  const result = await publish(f.plan);
+  assert.equal(result.comments[0].action, 'created');
+  assert.equal(f.writes().length, 1);
+  assert.equal(f.writes()[0].body.comments.length, 1);
+});
+
+test('summary decisions match only own review event and head; approvals use exact matching', async () => {
+  const existing = { ...own(prose, 300), state: 'APPROVED', commit_id: SHA };
+  const f = fixture({ bodies: [], reviews: [existing], settings: { dedupe: 'similar' } });
+  f.plan.comments = batch(similarProse, 'APPROVE', []);
+  assert.equal((await planPublication(f.plan)).comments[0].action, 'created');
+  f.plan.comments = batch(prose, 'APPROVE', []);
+  assert.equal((await planPublication(f.plan)).comments[0].action, 'skipped');
+  f.plan.comments = batch(prose, 'REQUEST_CHANGES', []);
+  assert.equal((await planPublication(f.plan)).comments[0].action, 'created');
+  f.plan.sha = 'b'.repeat(40);
+  f.plan.comments = batch(prose, 'APPROVE', []);
+  assert.equal((await planPublication(f.plan)).comments[0].action, 'created');
+  f.plan.sha = SHA;
+  f.plan.comments = batch(similarProse, 'COMMENT', []);
+  f.remoteReviews.push({ ...own(prose, 301), state: 'COMMENTED', commit_id: SHA });
+  assert.equal((await planPublication(f.plan)).comments[0].reason, 'similar');
+});
+
+test('a submitted review is visible in partial results if comment URL lookup fails', async () => {
+  const f = fixture({ bodies: [], overrides: { async listReviewCommentsForReview() { throw new Error('temporary read failure'); } } });
+  f.plan.comments = batch();
+  await assert.rejects(publish(f.plan), error => {
+    assert.match(error.message, /was submitted/);
+    assert.equal(error.partialResult.comments.length, 1);
+    assert.equal(error.partialResult.comments[0].action, 'created');
+    return true;
+  });
+  assert.equal(f.writes().length, 1);
+  f.github.listReviewCommentsForReview = async (_repo, _pr, reviewId) => f.remoteReview.filter(comment => comment.pull_request_review_id === reviewId);
+  assert.deepEqual((await publish(f.plan)).comments.map(entry => entry.action), ['skipped', 'skipped']);
+  assert.equal(f.writes().length, 1);
+});
+
+test('ambiguous review submission is not retried inside one invocation', async () => {
+  const f = fixture({ bodies: [] });
+  f.plan.comments = batch();
+  const original = f.github.createReview;
+  let attempts = 0;
+  f.github.createReview = async (...args) => {
+    attempts++;
+    await original(...args);
+    throw new Error('Response lost after GitHub accepted the review.');
+  };
+  await assert.rejects(publish(f.plan), /Check the PR before retrying/);
+  assert.equal(attempts, 1);
+  f.github.createReview = original;
+  assert.deepEqual((await publish(f.plan)).comments.map(entry => entry.action), ['skipped', 'skipped']);
+  assert.equal(f.writes().length, 1);
 });
 
 test('active attachments load both comment types even for a single kind of entry', async () => {

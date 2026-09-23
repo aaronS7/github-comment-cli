@@ -4,6 +4,15 @@ import { parseLocalReference } from './git.js';
 export const SEPARATOR = '<!-- gh-comment:next -->';
 export const MAX_COMMENT_LENGTH = 65536;
 const THREAD_DIRECTIVE = /^<!-- gh-comment:thread path="([^"\r\n]+)" line="([1-9]\d*)(?:-([1-9]\d*))?" side="(LEFT|RIGHT)" -->$/;
+const FILE_DIRECTIVE = /^<!-- gh-comment:file path="([^"\r\n]+)" -->$/;
+const REPLY_DIRECTIVE = /^<!-- gh-comment:reply id="([1-9]\d*)" -->$/;
+const REVIEW_DIRECTIVE = /^<!-- gh-comment:review event="(COMMENT|APPROVE|REQUEST_CHANGES)" -->$/;
+const ENTRY_DIRECTIVE = /^<!-- gh-comment:(?:thread|file|reply|review)(?=\s|-->|$)/;
+
+function validPath(file) {
+  return !file.startsWith('/') && !file.includes('\\') && !/[\x00-\x1f\x7f]/.test(file)
+    && !file.split('/').some(part => !part || part === '.' || part === '..');
+}
 
 function parseThreadDirective(value, entry) {
   const match = THREAD_DIRECTIVE.exec(value.trim());
@@ -13,12 +22,29 @@ function parseThreadDirective(value, entry) {
   const [, file, first, last, side] = match;
   const startLine = Number(first);
   const line = Number(last ?? first);
-  if (file.startsWith('/') || file.includes('\\') || /[\x00-\x1f\x7f]/.test(file)
-    || file.split('/').some(part => !part || part === '.' || part === '..')
-    || !Number.isSafeInteger(startLine) || !Number.isSafeInteger(line) || line < startLine) {
+  if (!validPath(file) || !Number.isSafeInteger(startLine) || !Number.isSafeInteger(line) || line < startLine) {
     throw new Error(`Comment ${entry} has an invalid thread path or line range.`);
   }
   return { kind: 'thread', path: file, startLine, line, side };
+}
+
+function parseDirective(value, entry) {
+  const directive = value.trim();
+  if (directive.startsWith('<!-- gh-comment:thread')) return parseThreadDirective(directive, entry);
+  if (directive.startsWith('<!-- gh-comment:file')) {
+    const file = FILE_DIRECTIVE.exec(directive)?.[1];
+    if (!file || !validPath(file)) throw new Error(`Comment ${entry} has an invalid file directive. Use <!-- gh-comment:file path="file" -->.`);
+    return { kind: 'file', path: file };
+  }
+  if (directive.startsWith('<!-- gh-comment:reply')) {
+    const raw = REPLY_DIRECTIVE.exec(directive)?.[1];
+    const parentId = Number(raw);
+    if (!raw || !Number.isSafeInteger(parentId)) throw new Error(`Comment ${entry} has an invalid reply directive. Use <!-- gh-comment:reply id="123456789" -->.`);
+    return { kind: 'reply', parentId };
+  }
+  const event = REVIEW_DIRECTIVE.exec(directive)?.[1];
+  if (!event) throw new Error(`Comment ${entry} has an invalid review directive. Use <!-- gh-comment:review event="COMMENT" -->.`);
+  return { kind: 'review', event };
 }
 
 function walk(node, visit) {
@@ -109,15 +135,15 @@ export async function renderMarkdown(markdown, resolveReference) {
   const definitions = new Map();
   const nodes = [];
   const separators = tree.children.filter(node => node.type === 'html' && node.value.trim() === SEPARATOR);
-  const directives = tree.children.filter(node => node.type === 'html' && node.value.trim().startsWith('<!-- gh-comment:thread'));
-  let threadNodeCount = 0;
+  const directives = tree.children.filter(node => node.type === 'html' && ENTRY_DIRECTIVE.test(node.value.trim()));
+  let directiveNodeCount = 0;
   walk(tree, node => {
-    if (node.type === 'html' && node.value.trim().startsWith('<!-- gh-comment:thread')) threadNodeCount++;
+    if (node.type === 'html' && ENTRY_DIRECTIVE.test(node.value.trim())) directiveNodeCount++;
     if (node.type === 'definition' && !definitions.has(node.identifier)) definitions.set(node.identifier, node);
     if (node.type === 'link' || node.type === 'linkReference' || node.type === 'imageReference') nodes.push(node);
   });
-  if (threadNodeCount !== directives.length) {
-    throw new Error('A thread directive must stand alone at the start of a comment entry. Put literal examples in a code fence.');
+  if (directiveNodeCount !== directives.length) {
+    throw new Error('A gh-comment directive must stand alone at the start of a comment entry. Put literal examples in a code fence.');
   }
   const resolved = new Map();
   // Validate in source order so errors point to the first invalid reference.
@@ -168,14 +194,14 @@ export async function renderMarkdown(markdown, resolveReference) {
     const start = ends[i];
     const end = boundaries[i + 1];
     const entryDirectives = directives.filter(node => node.position.start.offset >= start && node.position.end.offset <= end);
-    if (entryDirectives.length > 1) throw new Error(`Comment ${i + 1} has more than one thread directive.`);
+    if (entryDirectives.length > 1) throw new Error(`Comment ${i + 1} has more than one gh-comment directive.`);
     let placement;
     if (entryDirectives.length) {
       const node = entryDirectives[0];
       if (source.slice(start, node.position.start.offset).trim()) {
-        throw new Error(`Comment ${i + 1} must put its thread directive before the comment body.`);
+        throw new Error(`Comment ${i + 1} must put its gh-comment directive before the comment body.`);
       }
-      placement = parseThreadDirective(node.value, i + 1);
+      placement = parseDirective(node.value, i + 1);
       changes.push({ start: node.position.start.offset, end: node.position.end.offset, text: '' });
     }
     let body = source.slice(start, end);
@@ -184,6 +210,12 @@ export async function renderMarkdown(markdown, resolveReference) {
     body = body.trim();
     validateBody(body, i + 1);
     comments.push({ body, ...placement });
+  }
+  const reviewIndex = comments.findIndex(entry => entry.kind === 'review');
+  if (reviewIndex !== -1) {
+    if (reviewIndex !== 0 || comments.slice(1).some(entry => entry.kind !== 'thread')) {
+      throw new Error('A batch review must start with one review summary followed only by line threads. Put conversation, file, or reply entries in a separate report.');
+    }
   }
   return comments;
 }

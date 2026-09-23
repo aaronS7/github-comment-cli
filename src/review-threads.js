@@ -52,22 +52,23 @@ export function parseDiffHunks(patch) {
 }
 
 /** Reject stale or ambiguous targets before any comment or attachment upload. */
-export async function validateThreadTargets(comments, { github, repo, pr, pull }) {
-  const threads = comments.filter(entry => entry.kind === 'thread');
-  if (!threads.length) return;
+export async function validateReviewTargets(comments, { github, repo, pr, pull }) {
+  const targets = comments.filter(entry => entry.kind === 'thread' || entry.kind === 'file');
+  if (!targets.length) return;
   const files = await github.listFiles(repo, pr);
   if (!Array.isArray(files) || (Number.isSafeInteger(pull?.changed_files) && pull.changed_files > files.length)) {
-    throw new Error('GitHub did not return the complete pull request file list. Cannot validate review threads.');
+    throw new Error('GitHub did not return the complete pull request file list. Cannot validate review targets.');
   }
   const byPath = new Map(files.map(file => [file.filename, file]));
   const hunksByPath = new Map();
-  for (const entry of threads) {
+  for (const entry of targets) {
+    const file = byPath.get(entry.path);
+    if (!file) throw new Error(`Review ${entry.kind} target "${entry.path}" is not a changed file in this pull request.`);
+    if (entry.kind === 'file') continue;
     if (!['LEFT', 'RIGHT'].includes(entry.side) || !Number.isSafeInteger(entry.startLine)
       || !Number.isSafeInteger(entry.line) || entry.startLine < 1 || entry.line < entry.startLine) {
       throw new Error('Review thread placement is invalid.');
     }
-    const file = byPath.get(entry.path);
-    if (!file) throw new Error(`Review thread target "${entry.path}" is not a changed file in this pull request.`);
     if (!hunksByPath.has(entry.path)) {
       try { hunksByPath.set(entry.path, parseDiffHunks(file.patch)); }
       catch (error) { throw new Error(`Cannot validate review thread target "${entry.path}": ${error.message}`, { cause: error }); }
@@ -83,6 +84,29 @@ export async function validateThreadTargets(comments, { github, repo, pr, pull }
     if (!valid) {
       const range = entry.startLine === entry.line ? `${entry.line}` : `${entry.startLine}-${entry.line}`;
       throw new Error(`Review thread target "${entry.path}" ${entry.side} line ${range} is not one contiguous range in the current pull request diff.`);
+    }
+  }
+}
+
+export const validateThreadTargets = validateReviewTargets;
+
+/** The PR-scoped list proves the parent belongs to this PR and is a top-level thread. */
+export async function validateReplyTargets(comments, { github, repo, pr }) {
+  const replies = comments.filter(entry => entry.kind === 'reply');
+  if (!replies.length) return;
+  const remote = await github.listReviewComments(repo, pr);
+  if (!Array.isArray(remote)) throw new Error('GitHub did not return the pull request review comments. Cannot validate replies.');
+  const byId = new Map(remote.map(comment => [comment.id, comment]));
+  for (const entry of replies) {
+    const parent = byId.get(entry.parentId);
+    if (!parent) throw new Error(`Reply parent ${entry.parentId} is not a review comment on this pull request.`);
+    if (parent.in_reply_to_id) throw new Error(`Reply parent ${entry.parentId} is itself a reply. Use the top-level review comment ID.`);
+    if (parent.pull_request_url) {
+      let pathname;
+      try { pathname = new URL(parent.pull_request_url).pathname; } catch { /* Invalid metadata is rejected below. */ }
+      if (pathname?.toLowerCase() !== `/repos/${repo}/pulls/${pr}`.toLowerCase()) {
+        throw new Error(`Reply parent ${entry.parentId} does not belong to this pull request.`);
+      }
     }
   }
 }

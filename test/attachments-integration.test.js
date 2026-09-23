@@ -24,6 +24,7 @@ async function fixture(t) {
   await writeFile(reportFile, `Review screenshot.\n\n${image}\n`);
   const comments = [];
   const reviewComments = [];
+  const reviews = [];
   const uploads = [];
   const calls = [];
   const viewer = { id: 42, login: 'tester' };
@@ -32,6 +33,9 @@ async function fixture(t) {
     async getViewer() { calls.push('getViewer'); return viewer; },
     async listComments() { calls.push('listComments'); return comments.map(comment => ({ ...comment })); },
     async listReviewComments() { calls.push('listReviewComments'); return reviewComments.map(comment => ({ ...comment })); },
+    async listReviews() { calls.push('listReviews'); return reviews.map(review => ({ ...review })); },
+    async listFiles() { calls.push('listFiles'); return [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }]; },
+    async listReviewCommentsForReview(_repo, _pr, reviewId) { calls.push('listReviewCommentsForReview'); return reviewComments.filter(comment => comment.pull_request_review_id === reviewId); },
     async preflightAttachmentUpload(repo) { calls.push('preflight'); assert.equal(repo, 'example/project'); return { id: 321, permissions: { push: true } }; },
     async uploadAttachment(repo, asset) {
       calls.push('upload');
@@ -63,6 +67,36 @@ async function fixture(t) {
       comment.body = body;
       return { ...comment };
     },
+    async createReview(_repo, _pr, payload) {
+      calls.push('createReview');
+      const id = reviews.length + 300;
+      const review = { id, body: payload.body, state: 'COMMENTED', commit_id: SHA, user: viewer,
+        html_url: `https://github.com/example/project/pull/12#pullrequestreview-${id}` };
+      reviews.push(review);
+      for (const item of payload.comments) {
+        const commentId = reviewComments.length + 400;
+        reviewComments.push({ id: commentId, body: item.body, user: viewer, path: item.path, line: item.line,
+          start_line: item.start_line ?? item.line, side: item.side, position: 1, pull_request_review_id: id,
+          html_url: `https://github.com/example/project/pull/12#discussion_r${commentId}` });
+      }
+      return { ...review };
+    },
+    async createFileComment(_repo, _pr, entry, body) {
+      calls.push('createFileComment');
+      const id = reviewComments.length + 400;
+      const comment = { id, body, user: viewer, path: entry.path, subject_type: 'file', line: null, position: null,
+        html_url: `https://github.com/example/project/pull/12#discussion_r${id}` };
+      reviewComments.push(comment);
+      return { ...comment };
+    },
+    async createReviewReply(_repo, _pr, parentId, body) {
+      calls.push('createReviewReply');
+      const id = reviewComments.length + 400;
+      const comment = { id, body, user: viewer, in_reply_to_id: parentId,
+        html_url: `https://github.com/example/project/pull/12#discussion_r${id}` };
+      reviewComments.push(comment);
+      return { ...comment };
+    },
   };
   async function invoke(extra = [], { file = 'reports/report.md', command = 'post', io = {} } = {}) {
     let stdout = '';
@@ -73,7 +107,7 @@ async function fixture(t) {
     });
     return { status, stdout, stderr, result: status === 0 ? JSON.parse(stdout) : undefined };
   }
-  return { root, imageFile, reportFile, comments, reviewComments, uploads, calls, github, invoke,
+  return { root, imageFile, reportFile, comments, reviewComments, reviews, uploads, calls, github, invoke,
     writeReport: value => writeFile(reportFile, value), writes: () => calls.filter(call => ['upload', 'create', 'update'].includes(call)) };
 }
 
@@ -82,6 +116,37 @@ function manifest(body) {
   assert.ok(encoded, 'Published comment should carry its attachment manifest');
   return JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
 }
+
+test('batch review uploads one shared image and reuses its metadata on rerun', async t => {
+  const f = await fixture(t);
+  await f.writeReport(`<!-- gh-comment:review event="COMMENT" -->\nSummary.\n\n${image}\n\n<!-- gh-comment:next -->\n\n<!-- gh-comment:thread path="src/file.js" line="2" side="RIGHT" -->\nLine detail.\n\n${image}`);
+  const first = await f.invoke();
+  assert.equal(first.status, 0, first.stderr);
+  assert.deepEqual(first.result.comments.map(entry => entry.action), ['created', 'created']);
+  assert.equal(f.uploads.length, 1);
+  assert.deepEqual(manifest(f.reviews[0].body).assets, manifest(f.reviewComments[0].body).assets);
+  const second = await f.invoke();
+  assert.equal(second.status, 0, second.stderr);
+  assert.deepEqual(second.result.comments.map(entry => entry.action), ['skipped', 'skipped']);
+  assert.equal(f.uploads.length, 1);
+  assert.equal(f.reviews.length, 1);
+});
+
+test('file threads and replies reuse an existing uploaded image', async t => {
+  const f = await fixture(t);
+  await f.writeReport(`<!-- gh-comment:file path="src/file.js" -->\nWhole file.\n\n${image}`);
+  const file = await f.invoke();
+  assert.equal(file.status, 0, file.stderr);
+  assert.equal(file.result.comments[0].action, 'created');
+  assert.equal(f.reviewComments[0].subject_type, 'file');
+  await f.writeReport(`<!-- gh-comment:reply id="400" -->\nFollow-up.\n\n${image}`);
+  const reply = await f.invoke();
+  assert.equal(reply.status, 0, reply.stderr);
+  assert.equal(reply.result.comments[0].action, 'created');
+  assert.equal(f.reviewComments[1].in_reply_to_id, 400);
+  assert.equal(f.uploads.length, 1);
+  assert.equal((await f.invoke()).result.comments[0].action, 'skipped');
+});
 
 test('a real Markdown file uploads report-relative images and writes reusable hash metadata', async t => {
   const f = await fixture(t);

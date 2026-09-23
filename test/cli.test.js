@@ -36,7 +36,8 @@ async function invoke(args, options = {}) {
   return { status, stdout, stderr };
 }
 
-function api(sha, { headRepo = 'example/project', comments = [], nextComments, viewer = { id: 42, login: 'tester' }, failWrite = 0, changedHead = false } = {}) {
+function api(sha, { headRepo = 'example/project', comments = [], reviewComments = [], reviews = [], files = [], nextComments,
+  viewer = { id: 42, login: 'tester' }, failWrite = 0, changedHead = false } = {}) {
   const calls = [];
   let pullReads = 0;
   let writes = 0;
@@ -50,9 +51,12 @@ function api(sha, { headRepo = 'example/project', comments = [], nextComments, v
       pullReads++;
       data = { number: 12, head: { sha: changedHead && pullReads > 1 ? 'b'.repeat(40) : sha, repo: { full_name: headRepo }, ref: 'topic' } };
     } else if (pathname === '/user') data = viewer;
+    else if (init.method === 'GET' && pathname.endsWith('/pulls/12/files')) data = files;
+    else if (init.method === 'GET' && pathname.endsWith('/pulls/12/reviews')) data = reviews;
     else if (init.method === 'GET' && pathname.endsWith('/comments')) {
-      data = new URL(url).searchParams.get('page') === '2' ? nextComments : comments;
-      if (nextComments && new URL(url).searchParams.get('page') !== '2') {
+      const review = pathname.includes('/pulls/12/comments') || pathname.includes('/reviews/');
+      data = review ? reviewComments : new URL(url).searchParams.get('page') === '2' ? nextComments : comments;
+      if (!review && nextComments && new URL(url).searchParams.get('page') !== '2') {
         headers.link = `<https://api.github.com${pathname}?per_page=100&page=2>; rel="next"`;
       }
     }
@@ -75,6 +79,33 @@ test('offline CLI renders a commit permalink and leaves code examples untouched'
   assert.match(result.stdout, new RegExp(`/blob/${sha}/src/file.js#L2-L3`));
   assert.ok(result.stdout.includes(' "source")'));
   assert.ok(result.stdout.includes('`[literal](src/file.js:900)`'));
+});
+
+test('render --pr previews new directive metadata and rejects offline review placement', async t => {
+  const { root, sha } = await fixture(t);
+  const mock = api(sha, { files: [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }] });
+  const markdown = '<!-- gh-comment:file path="src/file.js" -->\nWhole-file note.';
+  const preview = await invoke(['render', '-', '--repo', 'example/project', '--pr', '12', '--json'], { cwd: root, ...mock, markdown });
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.deepEqual(JSON.parse(preview.stdout).comments, [{ kind: 'file', path: 'src/file.js', body: 'Whole-file note.' }]);
+  assert.deepEqual(mock.calls.map(call => call.path), ['/repos/example/project/pulls/12', '/repos/example/project/pulls/12/files']);
+  const offline = await invoke(['render', '-', '--repo', 'example/project'], { cwd: root, markdown });
+  assert.equal(offline.status, 1);
+  assert.match(offline.stderr, /require a pull request/);
+});
+
+test('batch review dry-run groups summary and new lines without writing', async t => {
+  const { root, sha } = await fixture(t);
+  const mock = api(sha, { files: [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }] });
+  const markdown = '<!-- gh-comment:review event="COMMENT" -->\nSummary [line](src/file.js:2).\n\n<!-- gh-comment:next -->\n\n<!-- gh-comment:thread path="src/file.js" line="2" side="RIGHT" -->\n```suggestion\nnew value\n```';
+  const result = await invoke(['post', '-', '--repo', 'example/project', '--pr', '12', '--dry-run', '--json'], { cwd: root, ...mock, markdown });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.comments.map(entry => entry.action), ['created', 'created']);
+  assert.deepEqual(output.writes, [{ operation: 'submitReview', event: 'COMMENT', commentIndexes: [1, 2] }]);
+  assert.match(output.comments[0].body, new RegExp(`/blob/${sha}/src/file.js#L2`));
+  assert.equal(output.comments[1].body, '```suggestion\nnew value\n```');
+  assert.ok(mock.calls.every(call => call.method === 'GET'));
 });
 
 test('stdin preserves unicode across byte chunk boundaries and emits parseable JSON', async t => {
