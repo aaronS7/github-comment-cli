@@ -81,6 +81,15 @@ test('only standalone top-level separator comments split entries', async () => {
   ]);
 });
 
+test('a leading thread directive sets placement without entering the comment body', async () => {
+  const source = '<!-- gh-comment:thread path="src/file.js" line="12-13" side="RIGHT" -->\nCheck both lines.\n\n<!-- gh-comment:next -->\n\nA conversation note.';
+  assert.deepEqual(await renderMarkdown(source, fixedResolver), [
+    { kind: 'thread', path: 'src/file.js', startLine: 12, line: 13, side: 'RIGHT', body: 'Check both lines.' },
+    { body: 'A conversation note.' },
+  ]);
+  await assert.rejects(renderMarkdown('Preface.\n\n<!-- gh-comment:thread path="src/file.js" line="12" side="RIGHT" -->\nCheck.', fixedResolver), /before the comment body/);
+});
+
 test('rejects invalid local line numbers with Markdown source location', async () => {
   for (const target of ['src/file.js:0', 'src/file.js:3-2', 'src/file.js#L0', 'src/file.js#L4-L2']) {
     await assert.rejects(renderMarkdown(`Heading\n\n[bad](${target})`, fixedResolver), /Markdown line 3: Invalid line range/);

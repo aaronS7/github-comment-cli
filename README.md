@@ -14,7 +14,11 @@ becomes:
 Please check the [validation](https://github.com/owner/repo/blob/COMMIT_SHA/src/service.ts#L12-L18).
 ```
 
-The first version creates comments in the PR conversation. Inline review threads attached to a diff are a future feature.
+Entries post to the PR conversation by default. Add a thread directive to an entry when its feedback should appear on a diff line and be resolvable in GitHub.
+
+## Agent resources
+
+The repository includes [`llms.txt`](llms.txt) as a compact map of its documentation and implementation, plus a [GitHub PR comments skill](.agents/skills/github-comment-cli/SKILL.md) with an agent workflow for drafting, previewing, and publishing comments.
 
 ## Install from source
 
@@ -29,6 +33,44 @@ gh-comment --help
 The executable is `gh-comment`; the package is `github-comment-cli`. This project has not been published to npm yet.
 
 For authenticated GitHub access, the CLI checks `GH_TOKEN`, then `GITHUB_TOKEN`, then an existing GitHub CLI login (`gh auth token`). If you use GitHub CLI, run `gh auth login` once. Offline rendering needs no token; public PR metadata can be read without one. Publication requires a token with pull request write access to the target repository. See GitHub's [comment API permissions](https://docs.github.com/en/rest/issues/comments#create-an-issue-comment).
+
+### Test locally as a GitHub App
+
+Install the App on the target repository and grant it pull request read/write permission. Run the interactive wrapper from this checkout:
+
+```sh
+npm run mint-app-token
+```
+
+It prompts for the App Client ID, private-key `.pem` file location, and target repository. The repository default comes from the `origin` remote when available; enter a different repository if needed. The helper writes the short-lived installation token to `.env` as `GH_TOKEN`, preserving other entries and restricting the file to owner-only permissions.
+
+#### Optional setup page for App defaults
+
+The page only saves optional default values for the App Client ID, private-key path, and repository. `npm run mint-app-token` also works on its own and prompts for these values.
+
+For HTTP loopback access, start the server from this checkout and open <http://localhost:4179>. Disable the `Secure` cookie for this HTTP session so browsers including Safari retain it:
+
+```sh
+GH_APP_CONFIG_SECURE_COOKIE=false npm run app-config-ui
+```
+
+On the host, run `npm run app-config-ui:code` in another terminal to display the access code. The page asks for the App Client ID, private-key path, and default repository, then saves `GH_APP_CLIENT_ID`, `GH_APP_PRIVATE_KEY_FILE`, and `GH_REPO` to this checkout's `.env`. It does not serve `.env` or read the private key contents. After saving, run `npm run mint-app-token` to mint a one-hour `GH_TOKEN`.
+
+For access from another device on your tailnet, start the server with `npm run app-config-ui` (without the HTTP cookie override), keep it bound to localhost, and run `tailscale serve --bg 4179` on the host. Open the HTTPS URL it prints. This keeps the default `Secure` session cookie; see [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) for setup. If you instead bind the server directly to a private Tailscale address and use HTTP, set `GH_APP_CONFIG_HOSTS` to that address and `GH_APP_CONFIG_SECURE_COOKIE=false` before starting it; browsers otherwise reject the `Secure` cookie on an HTTP URL. Use HTTPS for remote access when possible.
+
+Load those credentials into the current shell when you want to use `gh-comment`:
+
+```sh
+set -a
+. ./.env
+set +a
+gh-comment post review.md --pr 123 --dry-run
+unset GH_TOKEN
+```
+
+Remove `--dry-run` to publish as the App bot. The token expires after one hour; run `npm run mint-app-token` again to refresh it. To mint a token and immediately run the CLI, use `npm run gh-comment:app -- post review.md --pr 123 --dry-run`.
+
+Keep the private key outside version control. `.pem` files are ignored by this repository, and the wrapper requires restrictive file permissions on Unix-like systems.
 
 ## First comment
 
@@ -56,7 +98,7 @@ gh-comment post review.md --pr 123 --dry-run
 gh-comment post review.md --pr 123
 ```
 
-`render` prints the converted Markdown without checking existing comments. `post --dry-run` resolves the PR, checks your existing comments, and previews the planned results without posting. `post` reports what it created, updated, left unchanged, or skipped.
+`render` prints the converted Markdown without checking existing comments. By default, `post --dry-run` resolves the PR, checks your existing comments, and previews the planned results without posting. `post` reports what it created, updated, left unchanged, or skipped.
 
 The CLI accepts a PR URL and an explicit repository:
 
@@ -201,6 +243,25 @@ Entries post in file order. Normal Markdown horizontal rules (`---`) remain insi
 
 All entries and references are validated before publication begins. GitHub accepts separate comments as separate requests: if a later request fails, earlier comments can already exist. Review the reported results before rerunning, especially when duplicate checks are disabled.
 
+## Resolvable review threads
+
+Start an entry with a thread directive to attach it to a line or contiguous range in the current PR diff:
+
+```markdown
+<!-- gh-comment:thread path="src/service.ts" line="12-18" side="RIGHT" -->
+Please clarify why this validation happens here.
+
+<!-- gh-comment:next -->
+
+The rest of the change looks good.
+```
+
+Use `line="12"` for one line or `line="12-18"` for a range. `RIGHT` uses new-side line numbers for added or context lines; `LEFT` uses old-side line numbers for deleted lines. The path starts at the repository root. The directive is removed from the published body. A normal source link in the body supplies context but does not choose the thread's location. Entries without a directive remain PR conversation comments, and both kinds can appear in one report.
+
+Thread targets must name a changed file and lines present together on one side of one hunk in the current PR diff. Missing, stale, or unavailable diff targets fail before publication; the CLI does not turn them into conversation comments. Use `render review.md --pr 123` or `post review.md --pr 123 --dry-run` to check placement. Offline `render` cannot validate a thread. GitHub lets the PR author or someone with repository write access resolve the resulting conversation in **Files changed**. Existing conversation comments cannot be converted into review threads.
+
+Duplicate checks compare review comments with the same path, side, and line range separately from conversation comments. An exact match to an existing resolved thread is skipped without reopening it. `--key` applies only to conversation comments. Review threads post one at a time, so inspect partial results before retrying after a network failure. See GitHub's [review-comment API](https://docs.github.com/en/rest/pulls/comments#create-a-review-comment-for-a-pull-request) and [resolution guide](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/commenting-on-a-pull-request#resolving-conversations).
+
 ## Skip duplicate comments
 
 The default `--dedupe exact` checks comments from the authenticated account on the target PR and skips matching content. It also checks earlier entries in the same Markdown file. A comment posted by another account does not suppress yours, and comments on other PRs are not considered.
@@ -292,9 +353,11 @@ Add `--json` for machine-readable output. Rendering returns target metadata and 
 
 Offline rendering uses `"pr": null`. Publication and `post --dry-run` include an action for every entry: `created`, `updated`, `unchanged`, or `skipped`. Known comments include their ID and URL; skipped entries also include the reason and similarity score. A dry run includes the planned comment bodies, and an entry awaiting creation has no published URL yet.
 
+Thread entries also include `kind: "thread"`, `path`, `startLine`, `line`, and `side` in JSON. Conversation entries keep their existing shape, without a `kind` field.
+
 | Action | Meaning |
 | --- | --- |
-| `created` | Create a new PR conversation comment |
+| `created` | Create a new PR conversation comment or review thread |
 | `updated` | Replace the contents of the existing comment with this key |
 | `unchanged` | The comment with this key already matches |
 | `skipped` | An existing own comment or earlier input entry matches |
@@ -328,4 +391,4 @@ npm test
 
 Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
 
-Current scope is GitHub.com PR conversation comments, Markdown source links, native image/video attachments, multiple entries, duplicate checks, and one-comment updates. Inline reviews, issue-specific commands, and a packaged GitHub Action can build on this interface.
+Current scope is GitHub.com PR conversation comments and resolvable diff review threads, Markdown source links, native image/video attachments, multiple entries, duplicate checks, and one-comment conversation updates. Review approval flows, issue-specific commands, and a packaged GitHub Action can build on this interface.

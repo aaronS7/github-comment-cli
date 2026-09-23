@@ -314,6 +314,13 @@ export class GitHub {
   createComment(repo, number, body) { return this.request('POST', `/repos/${repo}/issues/${positiveInteger(number, 'Pull request number')}/comments`, { body }); }
   listComments(repo, number) { return this.paginate(`/repos/${repo}/issues/${positiveInteger(number, 'Pull request number')}/comments`); }
   updateComment(repo, id, body) { return this.request('PATCH', `/repos/${repo}/issues/comments/${positiveInteger(id, 'Comment ID')}`, { body }); }
+  createReviewComment(repo, number, entry, body, sha) {
+    return this.request('POST', `/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/comments`, {
+      body, commit_id: sha, path: entry.path, line: entry.line, side: entry.side,
+      ...(entry.startLine === entry.line ? {} : { start_line: entry.startLine, start_side: entry.side }),
+    });
+  }
+  listReviewComments(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/comments`); }
   createReview(repo, number, body) { return this.request('POST', `/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/reviews`, body); }
   listFiles(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/files`); }
 }

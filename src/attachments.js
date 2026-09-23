@@ -99,7 +99,7 @@ export class Attachments {
         }
         bodies[index] = rewriteAttachments(bodies[index], replacements);
       }
-      return bodies.map(body => { this.validate(body); return { body }; });
+      return bodies.map((body, index) => { this.validate(body); return { ...comments[index], body }; });
     } catch (error) { await this.dispose(); throw error; }
   }
 

@@ -5,11 +5,18 @@
   "type": "module",
   "engines": { "node": ">=22" },
   "bin": { "gh-comment": "bin/gh-comment.js" },
-  "files": ["bin/", "src/", "examples/", "README.md"],
+  "files": ["bin/", "src/", "examples/", "README.md", "llms.txt", ".agents/", "mint-app-token.mjs", "config-ui-server.mjs"],
   "scripts": {
+    "gh-comment:app": "node mint-app-token.mjs",
+    "mint-app-token": "node mint-app-token.mjs",
+    "app-config-ui": "node config-ui-server.mjs",
+    "app-config-ui:code": "node config-ui-server.mjs --show-code",
     "test": "node --test",
-    "check": "node --check bin/gh-comment.js && node --check src/cli.js && node --check src/markdown.js && node --check src/git.js && node --check src/github.js && node --check src/config.js && node --check src/dedupe.js && node --check src/publish.js && node --check src/attachment-data.js && node --check src/attachment-markdown.js && node --check src/attachment-metadata.js && node --check src/attachments.js",
+    "check": "node --check bin/gh-comment.js && node --check mint-app-token.mjs && node --check config-ui-server.mjs && node --check src/cli.js && node --check src/markdown.js && node --check src/git.js && node --check src/github.js && node --check src/config.js && node --check src/dedupe.js && node --check src/publish.js && node --check src/review-threads.js && node --check src/app-env.js && node --check src/attachment-data.js && node --check src/attachment-markdown.js && node --check src/attachment-metadata.js && node --check src/attachments.js",
     "prepack": "npm run check && npm test"
   },
-  "dependencies": { "mdast-util-from-markdown": "^2.0.2" }
+  "dependencies": {
+    "@octokit/auth-app": "^8.3.1",
+    "mdast-util-from-markdown": "^2.0.2"
+  }
 }
