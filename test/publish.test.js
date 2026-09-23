@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { planPublication, publish } from '../src/publish.js';
+import { appendAttachmentMetadata, assetKey } from '../src/attachment-metadata.js';
 
 const SHA = 'a'.repeat(40);
 const VIEWER = { id: 42, login: 'reviewer' };
 const commentUrl = id => `https://github.com/example/project/pull/12#issuecomment-${id}`;
 
-function fixture({ comments = [], bodies = ['Report'], settings, marker, overrides = {} } = {}) {
+function fixture({ comments = [], reviewComments = [], bodies = ['Report'], settings, marker, overrides = {} } = {}) {
   const remote = comments.map(comment => ({ ...comment }));
+  const remoteReview = reviewComments.map(comment => ({ ...comment }));
   const calls = [];
   let nextId = 1000;
   const github = {
@@ -15,6 +17,7 @@ function fixture({ comments = [], bodies = ['Report'], settings, marker, overrid
     authenticated: true,
     async getViewer() { calls.push({ method: 'getViewer' }); return VIEWER; },
     async listComments(repo, pr) { calls.push({ method: 'listComments', repo, pr }); return remote.map(comment => ({ ...comment })); },
+    async listReviewComments(repo, pr) { calls.push({ method: 'listReviewComments', repo, pr }); return remoteReview.map(comment => ({ ...comment })); },
     async getPull(repo, pr) { calls.push({ method: 'getPull', repo, pr }); return { number: pr, head: { sha: SHA } }; },
     async createComment(repo, pr, body) {
       calls.push({ method: 'createComment', repo, pr, body });
@@ -38,6 +41,14 @@ function fixture({ comments = [], bodies = ['Report'], settings, marker, overrid
   return { plan, github, remote, calls, writes: () => calls.filter(call => ['createComment', 'updateComment'].includes(call.method)) };
 }
 
+function thread(body, line = 12) {
+  return { kind: 'thread', path: 'src/file.js', side: 'RIGHT', startLine: line, line, body };
+}
+
+function ownReview(body, line = 12, id = 200) {
+  return { ...own(body, id), path: 'src/file.js', side: 'RIGHT', start_line: line, line, position: 1 };
+}
+
 function own(body, id = 100) {
   return { id, body, user: VIEWER, html_url: commentUrl(id) };
 }
@@ -51,6 +62,40 @@ test('exact duplicate planning reports the existing comment without writes', asy
   assert.equal(result.comments[0].id, 100);
   assert.equal(result.comments[0].url, commentUrl(100));
   assert.equal(f.writes().length, 0);
+});
+
+test('review duplicates require the same file, side, and line range', async () => {
+  const f = fixture({ reviewComments: [ownReview('Check this line')], bodies: [] });
+  f.plan.comments = [thread('Check this line'), thread('Check this line', 13)];
+  const result = await planPublication(f.plan);
+  assert.deepEqual(result.comments.map(entry => entry.action), ['skipped', 'created']);
+  assert.equal(result.comments[0].id, 200);
+  assert.deepEqual(f.calls.filter(call => call.method.startsWith('list')).map(call => call.method), ['listReviewComments']);
+});
+
+test('active attachments load both comment types even for a single kind of entry', async () => {
+  const url = 'https://github.com/user-attachments/assets/00000000-0000-4000-8000-000000000001';
+  const asset = { sha256: 'a'.repeat(64), contentType: 'image/png', url };
+  const storedBody = appendAttachmentMetadata(`![Screenshot](${url})`, [asset]);
+  for (const [entries, comments, reviewComments] of [
+    [[{ body: 'Another report' }], [], [ownReview(storedBody)]],
+    [[thread('Another report')], [own(storedBody)], []],
+  ]) {
+    const f = fixture({ comments, reviewComments, bodies: [], settings: { dedupe: 'off' } });
+    f.plan.comments = entries;
+    let cache;
+    f.plan.attachments = {
+      active: true,
+      setCache(value) { cache = value; },
+      validate() {},
+      hasUploads() { return false; },
+      describe() { return []; },
+    };
+    await planPublication(f.plan);
+    assert.deepEqual(cache.get(assetKey(asset)), asset);
+    assert.deepEqual(f.calls.filter(call => call.method.startsWith('list')).map(call => call.method),
+      ['listComments', 'listReviewComments']);
+  }
 });
 
 test('rerunning a successful append skips the persisted comment', async () => {

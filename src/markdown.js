@@ -3,6 +3,23 @@ import { parseLocalReference } from './git.js';
 
 export const SEPARATOR = '<!-- gh-comment:next -->';
 export const MAX_COMMENT_LENGTH = 65536;
+const THREAD_DIRECTIVE = /^<!-- gh-comment:thread path="([^"\r\n]+)" line="([1-9]\d*)(?:-([1-9]\d*))?" side="(LEFT|RIGHT)" -->$/;
+
+function parseThreadDirective(value, entry) {
+  const match = THREAD_DIRECTIVE.exec(value.trim());
+  if (!match) {
+    throw new Error(`Comment ${entry} has an invalid thread directive. Use <!-- gh-comment:thread path="file" line="12-15" side="RIGHT" -->.`);
+  }
+  const [, file, first, last, side] = match;
+  const startLine = Number(first);
+  const line = Number(last ?? first);
+  if (file.startsWith('/') || file.includes('\\') || /[\x00-\x1f\x7f]/.test(file)
+    || file.split('/').some(part => !part || part === '.' || part === '..')
+    || !Number.isSafeInteger(startLine) || !Number.isSafeInteger(line) || line < startLine) {
+    throw new Error(`Comment ${entry} has an invalid thread path or line range.`);
+  }
+  return { kind: 'thread', path: file, startLine, line, side };
+}
 
 function walk(node, visit) {
   visit(node);
@@ -92,10 +109,16 @@ export async function renderMarkdown(markdown, resolveReference) {
   const definitions = new Map();
   const nodes = [];
   const separators = tree.children.filter(node => node.type === 'html' && node.value.trim() === SEPARATOR);
+  const directives = tree.children.filter(node => node.type === 'html' && node.value.trim().startsWith('<!-- gh-comment:thread'));
+  let threadNodeCount = 0;
   walk(tree, node => {
+    if (node.type === 'html' && node.value.trim().startsWith('<!-- gh-comment:thread')) threadNodeCount++;
     if (node.type === 'definition' && !definitions.has(node.identifier)) definitions.set(node.identifier, node);
     if (node.type === 'link' || node.type === 'linkReference' || node.type === 'imageReference') nodes.push(node);
   });
+  if (threadNodeCount !== directives.length) {
+    throw new Error('A thread directive must stand alone at the start of a comment entry. Put literal examples in a code fence.');
+  }
   const resolved = new Map();
   // Validate in source order so errors point to the first invalid reference.
   for (const node of nodes) {
@@ -144,12 +167,23 @@ export async function renderMarkdown(markdown, resolveReference) {
   for (let i = 0; i < boundaries.length - 1; i++) {
     const start = ends[i];
     const end = boundaries[i + 1];
+    const entryDirectives = directives.filter(node => node.position.start.offset >= start && node.position.end.offset <= end);
+    if (entryDirectives.length > 1) throw new Error(`Comment ${i + 1} has more than one thread directive.`);
+    let placement;
+    if (entryDirectives.length) {
+      const node = entryDirectives[0];
+      if (source.slice(start, node.position.start.offset).trim()) {
+        throw new Error(`Comment ${i + 1} must put its thread directive before the comment body.`);
+      }
+      placement = parseThreadDirective(node.value, i + 1);
+      changes.push({ start: node.position.start.offset, end: node.position.end.offset, text: '' });
+    }
     let body = source.slice(start, end);
     const edits = changes.filter(change => change.start >= start && change.end <= end).sort((a, b) => b.start - a.start);
     for (const change of edits) body = body.slice(0, change.start - start) + change.text + body.slice(change.end - start);
     body = body.trim();
     validateBody(body, i + 1);
-    comments.push({ body });
+    comments.push({ body, ...placement });
   }
   return comments;
 }

@@ -1,6 +1,6 @@
 ---
 name: github-comment-cli
-description: Draft, preview, and publish Markdown comments to GitHub pull request conversations with gh-comment. Use when writing PR comments that reference local source lines, include images or videos, avoid duplicate comments, update a keyed summary, or run from GitHub Actions.
+description: Draft, preview, and publish Markdown PR conversation comments or resolvable diff review threads with gh-comment. Use when writing PR feedback that references source lines, includes media, avoids duplicates, updates a keyed summary, or runs from GitHub Actions.
 compatibility: Requires Node.js 22 or newer, Git, a local checkout containing the PR head for source links, and GitHub authentication to inspect or publish PR comments.
 metadata:
   author: aaronS7
@@ -9,14 +9,14 @@ metadata:
 
 # Work with GitHub PR comments
 
-Use `gh-comment` to turn a Markdown report into one or more comments in a pull request's conversation. It does not create inline review threads.
+Use `gh-comment` to turn a Markdown report into PR conversation comments or resolvable diff review threads.
 
 ## Prepare the report
 
-1. Confirm the target repository and pull request. Use the code checkout that contains the exact PR head commit when adding local source references.
+1. Confirm the target repository and pull request. Check out the PR head, or ensure each referenced working file matches it.
 2. Draft Markdown in a report file. Reference code with ordinary Markdown links such as `[the validation](src/service.js:12-18)` or `[the validation](src/service.js#L12-L18)`. Relative code paths start at the repository root selected by `--cwd`.
 3. Put `<!-- gh-comment:next -->` on its own line to begin another comment. Keep it outside code fences. Without a separator, the file produces one comment.
-4. Use normal GitHub Markdown in the body. For collapsible content, use a `<details>` block with a `<summary>` ([GitHub's collapsed-section guide](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/organizing-information-with-collapsed-sections)). The comments are conversation comments, not inline review comments.
+4. Use normal GitHub Markdown in the body. For collapsible content, use a `<details>` block with a `<summary>` ([GitHub's collapsed-section guide](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/organizing-information-with-collapsed-sections)).
 
 For example:
 
@@ -31,6 +31,17 @@ Please check the [empty-input case](examples/demo.js:3-5).
 More Markdown can go here.
 </details>
 ```
+
+## Make a comment resolvable
+
+Put an explicit location at the start of an entry:
+
+```markdown
+<!-- gh-comment:thread path="src/service.js" line="12-18" side="RIGHT" -->
+Please explain why this check belongs here.
+```
+
+Use `line="12"` for one line or `line="12-18"` for a range. `RIGHT` uses new-side line numbers for added or context lines; `LEFT` uses old-side line numbers for deleted lines. The path is repository-relative, and the range must stay on one side of one hunk in the current PR diff. The directive is omitted from the posted body. Ordinary source links in the body do not set the location, since one comment may mention several files. Entries without a directive remain conversation comments. GitHub lets the PR author or a repository writer resolve a thread in **Files changed**. `--key` is for conversation comments only.
 
 ## Add images or videos
 
@@ -52,11 +63,11 @@ npm install --global .
 Render a report locally, then inspect the publication plan for the target PR:
 
 ```sh
-gh-comment render review.md --cwd /path/to/code-checkout
+gh-comment render review.md --repo owner/repo --pr 123 --cwd /path/to/code-checkout
 gh-comment post review.md --repo owner/repo --pr 123 --cwd /path/to/code-checkout --dry-run
 ```
 
-The report path is relative to the shell's working directory; `--cwd` selects the code checkout used to resolve source references. `render` checks that referenced files and lines exist in the selected commit. With `--pr`, links use the PR head commit and source contents must match it. Commit and push the referenced code first. `post --dry-run` also checks existing comments and therefore requires authentication.
+The report path is relative to the shell's working directory; `--cwd` selects the code checkout used to resolve source references. `render --pr` checks source links against the PR head and thread targets against its diff. Commit and push referenced code first. The default `post --dry-run` checks existing comments and requires authentication.
 
 Use `GH_TOKEN`, `GITHUB_TOKEN`, or an existing `gh auth login` session. The authenticated token determines the comment author and avatar; the CLI cannot assign an arbitrary profile. To post as an installed GitHub App, supply its short-lived installation token as `GH_TOKEN`. App installation tokens can post text comments and use hosted media URLs, but cannot upload native attachments. Never print or commit an App private key or token.
 
@@ -70,7 +81,7 @@ Use `GH_TOKEN`, `GITHUB_TOKEN`, or an existing `gh auth login` session. The auth
 Inspect every planned action in the dry-run output. Only publish when the user has requested publication:
 
 ```sh
-gh-comment post review.md --repo owner/repo --pr 123
+gh-comment post review.md --repo owner/repo --pr 123 --cwd /path/to/code-checkout
 ```
 
 Pass the same `--key`, dedupe mode, threshold, attachment, and checkout options to the publish command that you used in the dry run.
