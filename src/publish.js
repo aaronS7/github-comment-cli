@@ -205,8 +205,11 @@ async function publishBatch(plan, planned, bodies, result) {
   let publishedThreads = [];
   if (newThreads.length) {
     try {
-      publishedThreads = await github.listReviewCommentsForReview(plan.repo, plan.pr, review.id);
-      if (!Array.isArray(publishedThreads)) throw new Error('GitHub returned an invalid review-comment list.');
+      // GitHub's review-specific list can omit line and side even for fresh
+      // comments. The PR-wide list retains them, so filter it by review ID.
+      const comments = await github.listReviewComments(plan.repo, plan.pr);
+      if (!Array.isArray(comments)) throw new Error('GitHub returned an invalid review-comment list.');
+      publishedThreads = comments.filter(comment => comment.pull_request_review_id === review.id);
     } catch (error) {
       const failure = new Error(`Review ${result.comments[0].url} was submitted, but its inline comment URLs could not be read: ${error.message}. Check the PR before retrying.`, { cause: error });
       failure.partialResult = result;

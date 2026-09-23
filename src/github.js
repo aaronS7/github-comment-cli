@@ -331,9 +331,6 @@ export class GitHub {
   listReviewComments(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/comments`); }
   createReview(repo, number, body) { return this.request('POST', `/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/reviews`, body); }
   listReviews(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/reviews`); }
-  listReviewCommentsForReview(repo, number, reviewId) {
-    return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/reviews/${positiveInteger(reviewId, 'Review ID')}/comments`);
-  }
   listFiles(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/files`); }
 }
 

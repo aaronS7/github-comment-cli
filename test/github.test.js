@@ -62,13 +62,13 @@ test('new PR review operations send the documented endpoint fields', async () =>
   await github.createReviewReply('owner/project', 42, 77, 'Follow-up.');
   await github.createReview('owner/project', 42, { commit_id: sha, body: 'Summary.', event: 'COMMENT', comments: [{ path: 'src/file.js', line: 2, side: 'RIGHT', body: 'Line.' }] });
   await github.listReviews('owner/project', 42);
-  await github.listReviewCommentsForReview('owner/project', 42, 88);
+  await github.listReviewComments('owner/project', 42);
   assert.deepEqual(seen, [
     { path: '/repos/owner/project/pulls/42/comments', method: 'POST', body: { body: 'Whole file.', commit_id: sha, path: 'src/file.js', subject_type: 'file' } },
     { path: '/repos/owner/project/pulls/42/comments/77/replies', method: 'POST', body: { body: 'Follow-up.' } },
     { path: '/repos/owner/project/pulls/42/reviews', method: 'POST', body: { commit_id: sha, body: 'Summary.', event: 'COMMENT', comments: [{ path: 'src/file.js', line: 2, side: 'RIGHT', body: 'Line.' }] } },
     { path: '/repos/owner/project/pulls/42/reviews', method: 'GET', body: undefined },
-    { path: '/repos/owner/project/pulls/42/reviews/88/comments', method: 'GET', body: undefined },
+    { path: '/repos/owner/project/pulls/42/comments', method: 'GET', body: undefined },
   ]);
 });
 

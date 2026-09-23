@@ -20,10 +20,6 @@ function fixture({ comments = [], reviewComments = [], reviews = [], bodies = ['
     async listComments(repo, pr) { calls.push({ method: 'listComments', repo, pr }); return remote.map(comment => ({ ...comment })); },
     async listReviewComments(repo, pr) { calls.push({ method: 'listReviewComments', repo, pr }); return remoteReview.map(comment => ({ ...comment })); },
     async listReviews(repo, pr) { calls.push({ method: 'listReviews', repo, pr }); return remoteReviews.map(review => ({ ...review })); },
-    async listReviewCommentsForReview(repo, pr, reviewId) {
-      calls.push({ method: 'listReviewCommentsForReview', repo, pr, reviewId });
-      return remoteReview.filter(comment => comment.pull_request_review_id === reviewId).map(comment => ({ ...comment }));
-    },
     async getPull(repo, pr) { calls.push({ method: 'getPull', repo, pr }); return { number: pr, head: { sha: SHA } }; },
     async createComment(repo, pr, body) {
       calls.push({ method: 'createComment', repo, pr, body });
@@ -46,7 +42,7 @@ function fixture({ comments = [], reviewComments = [], reviews = [], bodies = ['
     },
     async createFileComment(repo, pr, entry, body, sha) {
       calls.push({ method: 'createFileComment', repo, pr, entry, body, sha });
-      const comment = { ...own(body, nextId++), path: entry.path, subject_type: 'file', line: null, position: null };
+      const comment = { ...own(body, nextId++), path: entry.path, subject_type: 'file', line: 1, position: 1 };
       remoteReview.push(comment);
       return { ...comment };
     },
@@ -62,7 +58,7 @@ function fixture({ comments = [], reviewComments = [], reviews = [], bodies = ['
       remoteReviews.push(review);
       for (const entry of body.comments) {
         remoteReview.push({ ...own(entry.body, nextId++), path: entry.path, side: entry.side,
-          line: entry.line, start_line: entry.start_line ?? entry.line, position: 1, pull_request_review_id: review.id });
+          line: entry.line, start_line: entry.start_line ?? null, position: 1, pull_request_review_id: review.id });
       }
       return { ...review };
     },
@@ -115,7 +111,7 @@ test('review duplicates require the same file, side, and line range', async () =
 test('file comments and replies deduplicate only at their own placement', async () => {
   const f = fixture({ bodies: [], reviewComments: [
     { ...ownReview('Check the file', 12, 200), subject_type: 'line' },
-    { ...own('Check the file', 201), path: 'src/file.js', subject_type: 'file', line: null, position: null },
+    { ...own('Check the file', 201), path: 'src/file.js', subject_type: 'file', line: 1, position: 1 },
     { ...own('Agreed', 202), in_reply_to_id: 200 },
   ] });
   f.plan.comments = [
@@ -188,8 +184,15 @@ test('summary decisions match only own review event and head; approvals use exac
 });
 
 test('a submitted review is visible in partial results if comment URL lookup fails', async () => {
-  const f = fixture({ bodies: [], overrides: { async listReviewCommentsForReview() { throw new Error('temporary read failure'); } } });
+  const f = fixture({ bodies: [] });
   f.plan.comments = batch();
+  const original = f.github.listReviewComments;
+  let reads = 0;
+  f.github.listReviewComments = async (...args) => {
+    reads++;
+    if (reads === 2) throw new Error('temporary read failure');
+    return original(...args);
+  };
   await assert.rejects(publish(f.plan), error => {
     assert.match(error.message, /was submitted/);
     assert.equal(error.partialResult.comments.length, 1);
@@ -197,7 +200,7 @@ test('a submitted review is visible in partial results if comment URL lookup fai
     return true;
   });
   assert.equal(f.writes().length, 1);
-  f.github.listReviewCommentsForReview = async (_repo, _pr, reviewId) => f.remoteReview.filter(comment => comment.pull_request_review_id === reviewId);
+  f.github.listReviewComments = original;
   assert.deepEqual((await publish(f.plan)).comments.map(entry => entry.action), ['skipped', 'skipped']);
   assert.equal(f.writes().length, 1);
 });

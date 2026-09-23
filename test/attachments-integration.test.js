@@ -35,7 +35,6 @@ async function fixture(t) {
     async listReviewComments() { calls.push('listReviewComments'); return reviewComments.map(comment => ({ ...comment })); },
     async listReviews() { calls.push('listReviews'); return reviews.map(review => ({ ...review })); },
     async listFiles() { calls.push('listFiles'); return [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }]; },
-    async listReviewCommentsForReview(_repo, _pr, reviewId) { calls.push('listReviewCommentsForReview'); return reviewComments.filter(comment => comment.pull_request_review_id === reviewId); },
     async preflightAttachmentUpload(repo) { calls.push('preflight'); assert.equal(repo, 'example/project'); return { id: 321, permissions: { push: true } }; },
     async uploadAttachment(repo, asset) {
       calls.push('upload');
@@ -76,7 +75,7 @@ async function fixture(t) {
       for (const item of payload.comments) {
         const commentId = reviewComments.length + 400;
         reviewComments.push({ id: commentId, body: item.body, user: viewer, path: item.path, line: item.line,
-          start_line: item.start_line ?? item.line, side: item.side, position: 1, pull_request_review_id: id,
+          start_line: item.start_line ?? null, side: item.side, position: 1, pull_request_review_id: id,
           html_url: `https://github.com/example/project/pull/12#discussion_r${commentId}` });
       }
       return { ...review };
@@ -84,7 +83,7 @@ async function fixture(t) {
     async createFileComment(_repo, _pr, entry, body) {
       calls.push('createFileComment');
       const id = reviewComments.length + 400;
-      const comment = { id, body, user: viewer, path: entry.path, subject_type: 'file', line: null, position: null,
+      const comment = { id, body, user: viewer, path: entry.path, subject_type: 'file', line: 1, position: 1,
         html_url: `https://github.com/example/project/pull/12#discussion_r${id}` };
       reviewComments.push(comment);
       return { ...comment };
