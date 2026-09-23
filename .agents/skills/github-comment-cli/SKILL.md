@@ -52,7 +52,7 @@ To submit a summary and line threads as one GitHub review, make the **first** en
 - Markdown media paths are relative to the report file's directory. Supported local files are PNG, JPG/JPEG, GIF, WebP, SVG, MP4, MOV, and WebM.
 - Use repeated `--attach FILE` flags to append files. Attachment-only comments can read empty Markdown from stdin.
 - Remote images remain at their original URLs by default. Add `--upload-remote-images` to download and upload remote Markdown images or remote `--attach` URLs. Use `--allow-private-network` only when the user specifically intends to download from a private network.
-- `post --dry-run` validates local attachments and downloads opted-in remote files, but it does not upload assets or create comments. `render` does not download or upload media.
+- `post --dry-run` validates local attachments and downloads opted-in remote files, but it does not upload assets or create comments. `render` and `preview` do not download or upload media.
 - Native GitHub media uploads need a supported user token with push access. GitHub App installation tokens and the built-in Actions `GITHUB_TOKEN` can post text comments and use hosted media URLs, but cannot perform native uploads.
 
 ## Preview before publishing
@@ -68,10 +68,11 @@ Render a report locally, then inspect the publication plan for the target PR:
 
 ```sh
 gh-comment render review.md --repo owner/repo --pr 123 --cwd /path/to/code-checkout
+gh-comment preview review.md --repo owner/repo --pr 123 --cwd /path/to/code-checkout --output review-preview.html
 gh-comment post review.md --repo owner/repo --pr 123 --cwd /path/to/code-checkout --dry-run
 ```
 
-The report path is relative to the shell's working directory; `--cwd` selects the code checkout used to resolve source references. `render --pr` checks source links against the PR head, thread targets against its diff, file targets against changed paths, and reply parents against that PR. All review/file/reply directives require `--pr` when rendering. Commit and push referenced code first. The default `post --dry-run` checks existing comments and requires authentication.
+The report path is relative to the shell's working directory; `--cwd` selects the code checkout used to resolve source references. `preview` writes a local HTML approximation of the GitHub UI; open the printed path in a browser. Without `--output`, it uses a private temporary file. It displays `<details>` folding, suggested edits, and small local images, while larger media get placeholders. `render --pr` and `preview --pr` check source links against the PR head, thread targets against its diff, file targets against changed paths, and reply parents against that PR. All review/file/reply directives require `--pr` for these commands. Commit and push referenced code first. `preview` does not check duplicate decisions; the default `post --dry-run` checks existing comments and requires authentication.
 
 Use `GH_TOKEN`, `GITHUB_TOKEN`, or an existing `gh auth login` session. The authenticated token determines the comment author and avatar; the CLI cannot assign an arbitrary profile. To post as an installed GitHub App, supply its short-lived installation token as `GH_TOKEN`. App installation tokens can post text comments and use hosted media URLs, but cannot upload native attachments. Never print or commit an App private key or token.
 
