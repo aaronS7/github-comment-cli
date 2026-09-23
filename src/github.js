@@ -320,8 +320,17 @@ export class GitHub {
       ...(entry.startLine === entry.line ? {} : { start_line: entry.startLine, start_side: entry.side }),
     });
   }
+  createFileComment(repo, number, entry, body, sha) {
+    return this.request('POST', `/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/comments`, {
+      body, commit_id: sha, path: entry.path, subject_type: 'file',
+    });
+  }
+  createReviewReply(repo, number, parentId, body) {
+    return this.request('POST', `/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/comments/${positiveInteger(parentId, 'Reply parent ID')}/replies`, { body });
+  }
   listReviewComments(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/comments`); }
   createReview(repo, number, body) { return this.request('POST', `/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/reviews`, body); }
+  listReviews(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/reviews`); }
   listFiles(repo, number) { return this.paginate(`/repos/${repo}/pulls/${positiveInteger(number, 'Pull request number')}/files`); }
 }
 

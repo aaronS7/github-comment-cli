@@ -1,8 +1,8 @@
 # github-comment-cli
 
-> `gh-comment` turns Markdown reports into pull request conversation comments or resolvable diff review threads, converts verified local source-line links into commit-pinned GitHub URLs, and can upload image or video attachments.
+> `gh-comment` turns Markdown reports into pull request conversation comments, resolvable diff threads, file comments, replies, or batched reviews; it converts verified local source-line links into commit-pinned GitHub URLs and can upload image or video attachments.
 
-The CLI targets GitHub.com pull requests. It supports conversation comments and opt-in resolvable diff review threads, multiple entries, exact duplicate suppression by default, opt-in near-duplicate checks, keyed conversation-comment updates, local and opted-in remote attachments, and GitHub Actions workflows. Requires Node.js 22 or newer and Git.
+The CLI targets GitHub.com pull requests. It supports opt-in batch reviews with explicit COMMENT/APPROVE/REQUEST_CHANGES events, file-level review comments, thread replies, multiple entries, exact duplicate suppression by default, opt-in near-duplicate checks, keyed conversation-comment updates, local and opted-in remote attachments, a local GitHub-like HTML preview (`gh-comment preview`), and GitHub Actions workflows. Requires Node.js 22 or newer and Git.
 
 ## Documentation
 
@@ -13,6 +13,7 @@ The CLI targets GitHub.com pull requests. It supports conversation comments and 
 ## Examples
 
 - [Review report](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/examples/review.md): multiple comments with local source-line references
+- [Batch review](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/examples/batch-review.md): one review summary with line comments and a suggested edit
 - [Attachment report](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/examples/attachments.md): Markdown images, videos, and attachment behavior
 - [GitHub Actions workflow](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/examples/github-actions.yml): permissions, PR checkout, concurrency, and a keyed comment
 - [Recurring summary](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/examples/summary.md): a single report suitable for `--key`
@@ -21,10 +22,11 @@ The CLI targets GitHub.com pull requests. It supports conversation comments and 
 ## Implementation
 
 - [CLI and publication flow](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/cli.js): options, validation, planning, dry runs, and output
+- [Local visual preview](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/visual-preview.js): safe GitHub-like HTML rendering of Markdown and comment structure
 - [Markdown renderer](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/markdown.js): comment entries and verified source-link conversion
 - [Git repository handling](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/git.js): tracked-file checks, commit matching, and permanent source URLs
 - [GitHub API integration](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/github.js): PR context, authentication, comments, and asset uploads
 - [Duplicate matching](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/dedupe.js): exact fingerprints and guarded lexical similarity
 - [Publication planner](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/publish.js): duplicate decisions, keyed updates, and comment writes
-- [Review thread validation](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/review-threads.js): changed-file and diff-line checks
+- [Review target validation](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/review-threads.js): changed-file, diff-line, and reply-parent checks
 - [Attachment handling](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/attachments.js): local and remote media preparation and upload coordination

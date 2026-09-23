@@ -1,5 +1,9 @@
 # Example for this source repository. Copy into .github/workflows/ to enable.
 # Replace the report step with your own Markdown report generation.
+# For a batch review instead of a keyed summary, generate a report beginning
+# with <!-- gh-comment:review event="COMMENT" -->, then line-thread entries.
+# Run the same dry-run/publish pair without --key. Target lines must exist in
+# the checked-out PR diff; keep this workflow's per-PR concurrency group.
 name: PR summary example
 
 on:

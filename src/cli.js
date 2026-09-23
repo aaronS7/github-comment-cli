@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { Repository } from './git.js';
@@ -7,7 +8,8 @@ import { hasKeyMarker, renderMarkdown, SEPARATOR, validateBody } from './markdow
 import { loadConfig } from './config.js';
 import { describeDecision, planPublication, publish } from './publish.js';
 import { Attachments } from './attachments.js';
-import { validateThreadTargets } from './review-threads.js';
+import { validateReplyTargets, validateReviewTargets } from './review-threads.js';
+import { renderPreviewHtml } from './visual-preview.js';
 
 export { publish } from './publish.js';
 
@@ -15,17 +17,20 @@ const HELP = `gh-comment — Markdown comments for GitHub pull requests
 
 Usage:
   gh-comment render <file.md|-> [options]
+  gh-comment preview <file.md|-> [options]
   gh-comment post   <file.md|-> [options]
 
 Commands:
   render       Print validated Markdown. Offline unless --pr is supplied.
-  post         Publish PR conversation comments or resolvable diff threads.
+  preview      Write a GitHub-like local HTML preview; never publish.
+  post         Publish PR comments, resolvable threads, replies, or a batch review.
 
 Options:
   --pr <number|url>  Pull request; post can infer it from branch or Actions event
   --repo <owner/repo>  Destination repository; otherwise inferred
   --cwd <directory> Local checkout (default: current directory)
-  --sha <commit>    Commit for offline render (default: HEAD)
+  --sha <commit>    Commit for offline render or preview (default: HEAD)
+  --output <file>  HTML destination for preview (default: private temporary file)
   --key <name>      Update your single comment with this key on repeated runs
   --dedupe <mode>   exact (default), similar, or off; compare your PR comments
   --similarity-threshold <0..1>  Similar-mode threshold (default: 0.96; > 0)
@@ -36,7 +41,7 @@ Options:
   --attachment-memory-limit <MiB>  Snapshot memory budget (default: 8; spill to disk)
   --allow-private-network  Allow LAN/loopback downloads with remote-image opt-in
   --dry-run         Show planned writes/skips without publishing (post only)
-  --json            Emit structured JSON instead of Markdown or comment URLs
+  --json            Emit structured JSON instead of normal command output
   --help, -h        Show this help
   --version, -v     Show version
 
@@ -45,6 +50,11 @@ Paths are relative to the repository root, or absolute inside the checkout.
 Separate comments with a standalone ${SEPARATOR}.
 Start an entry with <!-- gh-comment:thread path="src/file.ts" line="42-48" side="RIGHT" -->
 to post a resolvable diff thread. Use LEFT for deleted lines. A thread needs a PR.
+Use <!-- gh-comment:file path="src/file.ts" --> for a changed-file thread, or
+<!-- gh-comment:reply id="123456789" --> to reply to a top-level review comment.
+Start a report with <!-- gh-comment:review event="COMMENT" --> to submit its
+summary and following line threads as one review. APPROVE and REQUEST_CHANGES
+require explicit events. Review reports cannot mix in other entry kinds.
 Local Markdown images/media are uploaded; paths are relative to the report file.
 Code blocks and inline code stay literal. Referenced code must match the commit.
 Authenticate with GH_TOKEN, GITHUB_TOKEN, or gh auth login.
@@ -56,6 +66,7 @@ CLI options override config settings; the threshold applies only to similar mode
 function parse(argv) {
   const { values, positionals } = parseArgs({ args: argv, allowPositionals: true, strict: true, options: {
     pr: { type: 'string' }, repo: { type: 'string' }, cwd: { type: 'string' },
+    output: { type: 'string' },
     sha: { type: 'string' }, key: { type: 'string' },
     dedupe: { type: 'string' }, 'similarity-threshold': { type: 'string' }, config: { type: 'string' },
     attach: { type: 'string', multiple: true }, 'attachment-base': { type: 'string' },
@@ -65,14 +76,16 @@ function parse(argv) {
     help: { type: 'boolean', short: 'h' }, version: { type: 'boolean', short: 'v' },
   } });
   if (values.help || values.version) return { ...values };
-  if (positionals.length !== 2 || !['render', 'post'].includes(positionals[0])) {
-    throw new Error('Expected: gh-comment render|post <file.md|->. Run gh-comment --help for examples.');
+  if (positionals.length !== 2 || !['render', 'preview', 'post'].includes(positionals[0])) {
+    throw new Error('Expected: gh-comment render|preview|post <file.md|->. Run gh-comment --help for examples.');
   }
   const [command, file] = positionals;
   if (values.sha !== undefined && (command === 'post' || values.pr !== undefined)) {
-    throw new Error('--sha is only available for offline render. PR comments always use the current PR head commit.');
+    throw new Error('--sha is only available for offline render or preview. PR comments always use the current PR head commit.');
   }
-  if (values['dry-run'] && command !== 'post') throw new Error('--dry-run is for post; render already previews without publishing.');
+  if (values.output !== undefined && command !== 'preview') throw new Error('--output is only available for preview.');
+  if (values.output !== undefined && !values.output.trim()) throw new Error('--output cannot be empty.');
+  if (values['dry-run'] && command !== 'post') throw new Error('--dry-run is for post; render and preview never publish.');
   if (values.key !== undefined && !/^[A-Za-z0-9_.-]{1,100}$/.test(values.key)) {
     throw new Error('--key must contain 1–100 letters, numbers, dots, underscores, or hyphens.');
   }
@@ -146,17 +159,18 @@ export async function prepare(options, { cwd = process.cwd(), env = process.env,
   }
   const rendered = !source.trim() && options.attach?.length ? [{ body: '' }]
     : await renderMarkdown(source, async target => (await getRepository()).resolveReference(target, { sha, repo: linkRepo }));
-  if (rendered.some(entry => entry.kind === 'thread')) {
-    if (!context) throw new Error('Review threads require a pull request. Pass --pr to render.');
-    if (options.key !== undefined) throw new Error('--key cannot be used with review threads. Remove --key or publish a conversation comment.');
-    await validateThreadTargets(rendered, { github: context.github, repo, pr: context.number, pull: context.pull });
+  if (rendered.some(entry => entry.kind)) {
+    if (!context) throw new Error('Review threads, file comments, replies, and reviews require a pull request. Pass --pr to render or preview.');
+    if (options.key !== undefined) throw new Error('--key is only available for one PR conversation comment.');
+    await validateReviewTargets(rendered, { github: context.github, repo, pr: context.number, pull: context.pull });
+    await validateReplyTargets(rendered, { github: context.github, repo, pr: context.number });
   }
   const attachments = new Attachments({
     cwd,
     baseDir: options['attachment-base'] ? path.resolve(cwd, options['attachment-base'])
       : options.file === '-' ? cwd : path.dirname(path.resolve(cwd, options.file)),
     explicit: options.attach, uploadRemote: options['upload-remote-images'],
-    offline: options.command === 'render', allowPrivateNetwork: options['allow-private-network'],
+    offline: options.command !== 'post', allowPrivateNetwork: options['allow-private-network'],
     memoryLimitBytes: options['attachment-memory-limit'] === undefined ? undefined : Number(options['attachment-memory-limit']) * 1024 * 1024,
   });
   const comments = await attachments.prepare(rendered);
@@ -181,10 +195,34 @@ export function preview(plan) {
     ...(plan.attachments?.active || plan.attachments?.pending.length ? { attachments: plan.attachments.describe(plan.comments.map(entry => ({ ...entry, action: 'created' }))) } : {}) };
 }
 
+async function writeVisualPreview(plan, options, cwd) {
+  const html = await renderPreviewHtml(plan);
+  const destination = options.output
+    ? path.resolve(cwd, options.output)
+    : path.join(await mkdtemp(path.join(tmpdir(), 'gh-comment-preview-')), 'preview.html');
+  if (options.file !== '-') {
+    const inputFile = path.resolve(cwd, options.file);
+    const existingTarget = await realpath(destination).catch(error => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    if (destination === inputFile || existingTarget === await realpath(inputFile)) {
+      throw new Error('The preview output cannot overwrite the Markdown input file.');
+    }
+  }
+  await writeFile(destination, html, 'utf8');
+  return destination;
+}
+
 function displayBody(entry) {
-  if (entry.kind !== 'thread') return entry.body;
-  const range = entry.startLine === entry.line ? entry.line : `${entry.startLine}-${entry.line}`;
-  return `<!-- gh-comment:thread path="${entry.path}" line="${range}" side="${entry.side}" -->\n\n${entry.body}`;
+  let directive;
+  if (entry.kind === 'thread') {
+    const range = entry.startLine === entry.line ? entry.line : `${entry.startLine}-${entry.line}`;
+    directive = `<!-- gh-comment:thread path="${entry.path}" line="${range}" side="${entry.side}" -->`;
+  } else if (entry.kind === 'file') directive = `<!-- gh-comment:file path="${entry.path}" -->`;
+  else if (entry.kind === 'reply') directive = `<!-- gh-comment:reply id="${entry.parentId}" -->`;
+  else if (entry.kind === 'review') directive = `<!-- gh-comment:review event="${entry.event}" -->`;
+  return directive ? `${directive}\n\n${entry.body}` : entry.body;
 }
 
 export async function main(argv = process.argv.slice(2), io = {}) {
@@ -200,6 +238,11 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     plan = await prepare(options, io);
     if (options.command === 'render') {
       stdout.write(options.json ? `${JSON.stringify(preview(plan), null, 2)}\n` : `${plan.comments.map(displayBody).join(`\n\n${SEPARATOR}\n\n`)}\n`);
+    } else if (options.command === 'preview') {
+      const destination = await writeVisualPreview(plan, options, io.cwd ?? process.cwd());
+      stdout.write(options.json
+        ? `${JSON.stringify({ path: destination, repo: plan.repo, pr: plan.pr, sha: plan.sha }, null, 2)}\n`
+        : `${destination}\n`);
     } else if (options['dry-run']) {
       const result = await planPublication(plan);
       if (plan.attachments?.active) result.comments = result.comments.map(entry => ({ ...entry, body: plan.attachments.materialize(entry.body, { preview: true }) }));

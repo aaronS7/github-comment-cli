@@ -52,6 +52,26 @@ test('timeline publication sends exact Markdown JSON with authentication', async
   assert.equal(JSON.stringify(github).includes('test-token'), false);
 });
 
+test('new PR review operations send the documented endpoint fields', async () => {
+  const seen = [];
+  const github = new GitHub({ token: 'test-token', fetch: async (url, options) => {
+    seen.push({ path: new URL(url).pathname, method: options.method, body: options.body && JSON.parse(options.body) });
+    return json(options.method === 'GET' ? [] : { id: 88, html_url: 'https://github.com/owner/project/pull/42#discussion_r88' }, options.method === 'GET' ? 200 : 201);
+  } });
+  await github.createFileComment('owner/project', 42, { path: 'src/file.js' }, 'Whole file.', sha);
+  await github.createReviewReply('owner/project', 42, 77, 'Follow-up.');
+  await github.createReview('owner/project', 42, { commit_id: sha, body: 'Summary.', event: 'COMMENT', comments: [{ path: 'src/file.js', line: 2, side: 'RIGHT', body: 'Line.' }] });
+  await github.listReviews('owner/project', 42);
+  await github.listReviewComments('owner/project', 42);
+  assert.deepEqual(seen, [
+    { path: '/repos/owner/project/pulls/42/comments', method: 'POST', body: { body: 'Whole file.', commit_id: sha, path: 'src/file.js', subject_type: 'file' } },
+    { path: '/repos/owner/project/pulls/42/comments/77/replies', method: 'POST', body: { body: 'Follow-up.' } },
+    { path: '/repos/owner/project/pulls/42/reviews', method: 'POST', body: { commit_id: sha, body: 'Summary.', event: 'COMMENT', comments: [{ path: 'src/file.js', line: 2, side: 'RIGHT', body: 'Line.' }] } },
+    { path: '/repos/owner/project/pulls/42/reviews', method: 'GET', body: undefined },
+    { path: '/repos/owner/project/pulls/42/comments', method: 'GET', body: undefined },
+  ]);
+});
+
 test('public reads work without auth, but mutation fails before fetch', async () => {
   let calls = 0;
   const github = new GitHub({ fetch: async (url, options) => {

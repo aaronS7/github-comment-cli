@@ -88,8 +88,12 @@ Use your actual file path and line numbers, then preview and publish:
 # Offline preview using origin and local HEAD.
 gh-comment render review.md
 
+# Open a GitHub-like structural preview in your browser.
+gh-comment preview review.md --output review-preview.html
+
 # Preview against the exact head commit of PR 123.
 gh-comment render review.md --pr 123
+gh-comment preview review.md --pr 123 --output review-preview.html
 
 # Check what will be created or skipped on that PR.
 gh-comment post review.md --pr 123 --dry-run
@@ -98,7 +102,9 @@ gh-comment post review.md --pr 123 --dry-run
 gh-comment post review.md --pr 123
 ```
 
-`render` prints the converted Markdown without checking existing comments. By default, `post --dry-run` resolves the PR, checks your existing comments, and previews the planned results without posting. `post` reports what it created, updated, left unchanged, or skipped.
+`render` prints the converted Markdown without checking existing comments. `preview` writes a local HTML page showing each entry as a GitHub-like conversation comment, review summary, resolvable line/file thread, or reply. Open the printed file path in a browser. The page renders common GitHub-flavored Markdown, `<details>` folding, suggested-edit blocks, and local images up to 2 MiB each and 8 MiB total. Other local media show labeled placeholders; remote image URLs load in the browser. It is an approximation of GitHub's layout and does not know the eventual posting account or avatar. Without `--output`, it writes to a private temporary file and prints its path.
+
+`preview` never publishes, uploads, downloads remote media, or checks duplicates; use `post --dry-run` for planned actions and duplicate decisions. By default, `post --dry-run` resolves the PR, checks your existing comments, and previews the planned results without posting. `post` reports what it created, updated, left unchanged, or skipped.
 
 The CLI accepts a PR URL and an explicit repository:
 
@@ -217,7 +223,7 @@ gh-comment post review.md --pr 123 --upload-remote-images --allow-private-networ
 
 Remote downloads allow up to five redirects within a 30-second deadline. Their response media type and file signature must agree with the file type; a URL without a filename extension needs a supported response media type.
 
-`post --dry-run` reads and validates local files and downloads opted-in remote files, but uploads nothing and writes no comments. `render` never downloads remote attachments; it leaves them pending in the preview. The memory threshold defaults to 8 MiB in total across attachment snapshots and can be set with `--attachment-memory-limit 4`. It must be greater than 0 and at most 100 MiB, representing a whole number of bytes. Once that budget is exhausted, additional snapshots spill into private temporary files that are cleaned up when the command finishes. Streaming buffers and Node.js runtime memory are additional to this snapshot budget. Attachment and network options are CLI-only and cannot be enabled in `.gh-comment.json`.
+`post --dry-run` reads and validates local files and downloads opted-in remote files, but uploads nothing and writes no comments. `render` and `preview` never download remote attachments; they leave them pending. The memory threshold defaults to 8 MiB in total across attachment snapshots and can be set with `--attachment-memory-limit 4`. It must be greater than 0 and at most 100 MiB, representing a whole number of bytes. Once that budget is exhausted, additional snapshots spill into private temporary files that are cleaned up when the command finishes. Streaming buffers and Node.js runtime memory are additional to this snapshot budget. Attachment and network options are CLI-only and cannot be enabled in `.gh-comment.json`.
 
 Successfully posted comments retain hidden attachment hashes and asset URLs. Later runs by the same authenticated account on the same PR can reuse the uploaded bytes across machines. Skipped comments do not trigger another upload. Uploads and comment creation are separate operations: a failure after an upload can leave an asset that is not attached to a posted comment.
 
@@ -241,7 +247,7 @@ Could the [fallback](src/service.ts:30-35) include the request ID?
 
 Entries post in file order. Normal Markdown horizontal rules (`---`) remain inside their comment. Separators inside code blocks are examples rather than comment boundaries. See [examples/review.md](examples/review.md) for a complete sample.
 
-All entries and references are validated before publication begins. GitHub accepts separate comments as separate requests: if a later request fails, earlier comments can already exist. Review the reported results before rerunning, especially when duplicate checks are disabled.
+All entries and references are validated before publication begins. Entries outside an opt-in batch review use separate GitHub requests: if a later request fails, earlier comments can already exist. Review the reported results before rerunning, especially when duplicate checks are disabled.
 
 ## Resolvable review threads
 
@@ -258,9 +264,54 @@ The rest of the change looks good.
 
 Use `line="12"` for one line or `line="12-18"` for a range. `RIGHT` uses new-side line numbers for added or context lines; `LEFT` uses old-side line numbers for deleted lines. The path starts at the repository root. The directive is removed from the published body. A normal source link in the body supplies context but does not choose the thread's location. Entries without a directive remain PR conversation comments, and both kinds can appear in one report.
 
-Thread targets must name a changed file and lines present together on one side of one hunk in the current PR diff. Missing, stale, or unavailable diff targets fail before publication; the CLI does not turn them into conversation comments. Use `render review.md --pr 123` or `post review.md --pr 123 --dry-run` to check placement. Offline `render` cannot validate a thread. GitHub lets the PR author or someone with repository write access resolve the resulting conversation in **Files changed**. Existing conversation comments cannot be converted into review threads.
+Thread targets must name a changed file and lines present together on one side of one hunk in the current PR diff. Missing, stale, or unavailable diff targets fail before publication; the CLI does not turn them into conversation comments. Use `render review.md --pr 123`, `preview review.md --pr 123`, or `post review.md --pr 123 --dry-run` to check placement. Offline previews cannot validate a thread. GitHub lets the PR author or someone with repository write access resolve the resulting conversation in **Files changed**. Existing conversation comments cannot be converted into review threads.
 
-Duplicate checks compare review comments with the same path, side, and line range separately from conversation comments. An exact match to an existing resolved thread is skipped without reopening it. `--key` applies only to conversation comments. Review threads post one at a time, so inspect partial results before retrying after a network failure. See GitHub's [review-comment API](https://docs.github.com/en/rest/pulls/comments#create-a-review-comment-for-a-pull-request) and [resolution guide](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/commenting-on-a-pull-request#resolving-conversations).
+Duplicate checks compare review comments with the same path, side, and line range separately from conversation comments. An exact match to an existing resolved thread is skipped without reopening it. `--key` applies only to conversation comments. Standalone review threads post one at a time, so inspect partial results before retrying after a network failure. See GitHub's [review-comment API](https://docs.github.com/en/rest/pulls/comments#create-a-review-comment-for-a-pull-request) and [resolution guide](https://docs.github.com/en/pull-requests/how-tos/review-pull-requests/commenting-on-a-pull-request#resolving-conversations).
+
+## Batch reviews, file comments, and replies
+
+Start a report with a review directive to submit its summary and following line threads as **one GitHub review**:
+
+````markdown
+<!-- gh-comment:review event="COMMENT" -->
+The change is close. I have two inline suggestions.
+
+<!-- gh-comment:next -->
+
+<!-- gh-comment:thread path="src/service.ts" line="12" side="RIGHT" -->
+Please handle the empty value here.
+
+<!-- gh-comment:next -->
+
+<!-- gh-comment:thread path="src/service.ts" line="18-20" side="RIGHT" -->
+This can be simplified:
+
+```suggestion
+return value;
+```
+````
+
+The first entry is the review body. Only line-thread entries may follow it in the same report. A summary without line threads is also valid. `COMMENT` submits a neutral review. `APPROVE` and `REQUEST_CHANGES` are available only when you explicitly write those event names; GitHub applies its normal review permissions, including restrictions on approving your own PR. The CLI never infers a review decision from the wording of the summary. A fenced `suggestion` block is ordinary GitHub review Markdown and is preserved in the inline body.
+
+For feedback about a changed file without a suitable line, use a file-level review comment. To continue an existing review conversation, reply to its top-level review comment ID:
+
+```markdown
+<!-- gh-comment:file path="src/service.ts" -->
+Please describe the file's overall responsibility.
+
+<!-- gh-comment:next -->
+
+<!-- gh-comment:reply id="123456789" -->
+Thanks, that addresses my concern.
+```
+
+File paths must be changed by the PR; a file-level comment does not need a readable diff patch or an invented line number. A reply can target another person's top-level line or file comment on the same PR, but it cannot target another reply. Replies do not resolve or reopen threads. File comments and replies can mix with ordinary entries in a report **without** a review summary directive. Put them in a separate report when posting a batch review.
+
+All these directives must be standalone at the start of their entry. Their placement metadata is removed from the posted body. Use `render report.md --pr 123` or `preview report.md --pr 123` to validate targets without writing; these commands require `--pr` for any review, file, or reply directive. `--key` remains limited to a single PR conversation comment.
+
+The default duplicate check scopes file comments to the same changed path and replies to the same parent ID; it does not compare them with conversation or line comments. For batched reviews, existing inline findings are omitted from the review request. With no new findings, a repeated summary or decision from the same account on the same PR head is skipped. New findings still submit one review even if the summary text repeats. `--dedupe similar` applies to neutral `COMMENT` summaries at the configured threshold; `APPROVE` and `REQUEST_CHANGES` summaries use exact matching. A new PR head can receive a new review. As with other posts, concurrent runs can race, and a lost response can mean GitHub accepted the review; inspect the PR before retrying.
+
+See [examples/batch-review.md](examples/batch-review.md) for a complete report. GitHub documents the [review API](https://docs.github.com/en/rest/pulls/reviews#create-a-review-for-a-pull-request), [file review comments](https://docs.github.com/en/rest/pulls/comments#create-a-review-comment-for-a-pull-request), and [review replies](https://docs.github.com/en/rest/pulls/comments#create-a-reply-for-a-review-comment).
 
 ## Skip duplicate comments
 
@@ -353,11 +404,11 @@ Add `--json` for machine-readable output. Rendering returns target metadata and 
 
 Offline rendering uses `"pr": null`. Publication and `post --dry-run` include an action for every entry: `created`, `updated`, `unchanged`, or `skipped`. Known comments include their ID and URL; skipped entries also include the reason and similarity score. A dry run includes the planned comment bodies, and an entry awaiting creation has no published URL yet.
 
-Thread entries also include `kind: "thread"`, `path`, `startLine`, `line`, and `side` in JSON. Conversation entries keep their existing shape, without a `kind` field.
+Thread entries include `kind: "thread"`, `path`, `startLine`, `line`, and `side` in JSON. New entry types include `kind: "review"` with `event`, `kind: "file"` with `path`, or `kind: "reply"` with `parentId`. Batch dry runs add a `writes` array identifying the one review request and its included entry indexes. Published inline comments include their review ID and URL. Conversation entries keep their existing shape, without a `kind` field.
 
 | Action | Meaning |
 | --- | --- |
-| `created` | Create a new PR conversation comment or review thread |
+| `created` | Create a PR comment, reply, or review |
 | `updated` | Replace the contents of the existing comment with this key |
 | `unchanged` | The comment with this key already matches |
 | `skipped` | An existing own comment or earlier input entry matches |
@@ -391,4 +442,4 @@ npm test
 
 Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
 
-Current scope is GitHub.com PR conversation comments and resolvable diff review threads, Markdown source links, native image/video attachments, multiple entries, duplicate checks, and one-comment conversation updates. Review approval flows, issue-specific commands, and a packaged GitHub Action can build on this interface.
+Current scope is GitHub.com PR conversation comments, resolvable line and file threads, replies, batched reviews with explicit review decisions, Markdown source links, native image/video attachments, multiple entries, duplicate checks, and one-comment conversation updates. Resolving threads, issue-specific commands, and a packaged GitHub Action remain outside this interface.

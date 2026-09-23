@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -36,7 +36,8 @@ async function invoke(args, options = {}) {
   return { status, stdout, stderr };
 }
 
-function api(sha, { headRepo = 'example/project', comments = [], nextComments, viewer = { id: 42, login: 'tester' }, failWrite = 0, changedHead = false } = {}) {
+function api(sha, { headRepo = 'example/project', comments = [], reviewComments = [], reviews = [], files = [], nextComments,
+  viewer = { id: 42, login: 'tester' }, failWrite = 0, changedHead = false } = {}) {
   const calls = [];
   let pullReads = 0;
   let writes = 0;
@@ -50,9 +51,12 @@ function api(sha, { headRepo = 'example/project', comments = [], nextComments, v
       pullReads++;
       data = { number: 12, head: { sha: changedHead && pullReads > 1 ? 'b'.repeat(40) : sha, repo: { full_name: headRepo }, ref: 'topic' } };
     } else if (pathname === '/user') data = viewer;
+    else if (init.method === 'GET' && pathname.endsWith('/pulls/12/files')) data = files;
+    else if (init.method === 'GET' && pathname.endsWith('/pulls/12/reviews')) data = reviews;
     else if (init.method === 'GET' && pathname.endsWith('/comments')) {
-      data = new URL(url).searchParams.get('page') === '2' ? nextComments : comments;
-      if (nextComments && new URL(url).searchParams.get('page') !== '2') {
+      const review = pathname.includes('/pulls/12/comments') || pathname.includes('/reviews/');
+      data = review ? reviewComments : new URL(url).searchParams.get('page') === '2' ? nextComments : comments;
+      if (!review && nextComments && new URL(url).searchParams.get('page') !== '2') {
         headers.link = `<https://api.github.com${pathname}?per_page=100&page=2>; rel="next"`;
       }
     }
@@ -75,6 +79,104 @@ test('offline CLI renders a commit permalink and leaves code examples untouched'
   assert.match(result.stdout, new RegExp(`/blob/${sha}/src/file.js#L2-L3`));
   assert.ok(result.stdout.includes(' "source")'));
   assert.ok(result.stdout.includes('`[literal](src/file.js:900)`'));
+});
+
+test('preview writes a local GitHub-like page with rendered Markdown and inline local media', async t => {
+  const { root, sha } = await fixture(t);
+  await writeFile(path.join(root, 'diagram.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2"/></svg>');
+  await writeFile(path.join(root, 'clip.mp4'), 'video bytes');
+  await writeFile(path.join(root, 'review.md'), '# Notes\n\n[code](src/file.js:2)\n\n<details>\n<summary>More</summary>\n\n**Hidden detail**\n\n</details>\n\n- [x] Checked\n\n![diagram](diagram.svg)\n\n![clip](clip.mp4)\n\n<!-- gh-comment:next -->\n\nSecond entry.');
+  const output = path.join(root, 'preview.html');
+  const result = await invoke(['preview', 'review.md', '--output', output], { cwd: root });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, `${output}\n`);
+  const html = await readFile(output, 'utf8');
+  assert.match(html, /Local preview · nothing posted/);
+  assert.match(html, /PR conversation comment/);
+  assert.match(html, /entry 2/);
+  assert.match(html, /<details>/);
+  assert.match(html, /<summary>More<\/summary>/);
+  assert.match(html, /<strong>Hidden detail<\/strong>/);
+  assert.match(html, /<input[^>]*type="checkbox"[^>]*checked/);
+  assert.match(html, /data:image\/svg\+xml;base64,/);
+  assert.match(html, /clip\.mp4 · video attachment/);
+  assert.match(html, new RegExp(`/blob/${sha}/src/file.js#L2`));
+  assert.doesNotMatch(html, /gh-comment\.invalid\/attachments|gh-comment:next/);
+});
+
+test('preview groups a review and line thread without publishing', async t => {
+  const { root, sha } = await fixture(t);
+  const mock = api(sha, { files: [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }] });
+  const markdown = '<!-- gh-comment:review event="COMMENT" -->\nSummary.\n\n<!-- gh-comment:next -->\n\n<!-- gh-comment:thread path="src/file.js" line="2" side="RIGHT" -->\n```suggestion\nreplacement\n```';
+  const output = path.join(root, 'review-preview.html');
+  const result = await invoke(['preview', '-', '--repo', 'example/project', '--pr', '12', '--output', output], { cwd: root, ...mock, markdown });
+  assert.equal(result.status, 0, result.stderr);
+  const html = await readFile(output, 'utf8');
+  assert.match(html, /One COMMENT review · 1 inline thread/);
+  assert.match(html, /src\/file.js:L2/);
+  assert.match(html, /new side/);
+  assert.match(html, /Resolvable thread/);
+  assert.match(html, /language-suggestion/);
+  assert.ok(mock.calls.every(call => call.method === 'GET'));
+});
+
+test('preview sanitizes report HTML and chooses a temporary destination by default', async t => {
+  const { root } = await fixture(t);
+  const markdown = '<script>alert("no")</script>\n\n<img src="https://example.com/a.png" onerror="alert(1)">\n\n<a href="javascript:alert(1)">bad link</a>\n\n<details open ontoggle="alert(1)"><summary>Fold</summary>Safe</details>';
+  const result = await invoke(['preview', '-', '--json'], { cwd: root, markdown });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout).path;
+  t.after(() => rm(path.dirname(output), { recursive: true, force: true }));
+  const html = await readFile(output, 'utf8');
+  assert.match(html, /<details open/);
+  assert.match(html, /<summary>Fold<\/summary>/);
+  assert.match(html, /src="https:\/\/example.com\/a.png"/);
+  assert.doesNotMatch(html, /<script|onerror=|ontoggle=|javascript:|alert\(/);
+});
+
+test('preview protects its Markdown input and validates output options', async t => {
+  const { root } = await fixture(t);
+  await writeFile(path.join(root, 'review.md'), 'Original report');
+  const sameFile = await invoke(['preview', 'review.md', '--output', 'review.md'], { cwd: root });
+  assert.equal(sameFile.status, 1);
+  assert.match(sameFile.stderr, /cannot overwrite/);
+  await symlink('review.md', path.join(root, 'alias.html'));
+  const alias = await invoke(['preview', 'review.md', '--output', 'alias.html'], { cwd: root });
+  assert.equal(alias.status, 1);
+  assert.match(alias.stderr, /cannot overwrite/);
+  assert.equal(await readFile(path.join(root, 'review.md'), 'utf8'), 'Original report');
+  for (const args of [['render', 'review.md', '--output', 'out.html'], ['post', 'review.md', '--output', 'out.html']]) {
+    const result = await invoke(args, { cwd: root });
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /only available for preview/);
+  }
+});
+
+test('render --pr previews new directive metadata and rejects offline review placement', async t => {
+  const { root, sha } = await fixture(t);
+  const mock = api(sha, { files: [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }] });
+  const markdown = '<!-- gh-comment:file path="src/file.js" -->\nWhole-file note.';
+  const preview = await invoke(['render', '-', '--repo', 'example/project', '--pr', '12', '--json'], { cwd: root, ...mock, markdown });
+  assert.equal(preview.status, 0, preview.stderr);
+  assert.deepEqual(JSON.parse(preview.stdout).comments, [{ kind: 'file', path: 'src/file.js', body: 'Whole-file note.' }]);
+  assert.deepEqual(mock.calls.map(call => call.path), ['/repos/example/project/pulls/12', '/repos/example/project/pulls/12/files']);
+  const offline = await invoke(['render', '-', '--repo', 'example/project'], { cwd: root, markdown });
+  assert.equal(offline.status, 1);
+  assert.match(offline.stderr, /require a pull request/);
+});
+
+test('batch review dry-run groups summary and new lines without writing', async t => {
+  const { root, sha } = await fixture(t);
+  const mock = api(sha, { files: [{ filename: 'src/file.js', patch: '@@ -1,2 +1,3 @@\n one\n+two\n three' }] });
+  const markdown = '<!-- gh-comment:review event="COMMENT" -->\nSummary [line](src/file.js:2).\n\n<!-- gh-comment:next -->\n\n<!-- gh-comment:thread path="src/file.js" line="2" side="RIGHT" -->\n```suggestion\nnew value\n```';
+  const result = await invoke(['post', '-', '--repo', 'example/project', '--pr', '12', '--dry-run', '--json'], { cwd: root, ...mock, markdown });
+  assert.equal(result.status, 0, result.stderr);
+  const output = JSON.parse(result.stdout);
+  assert.deepEqual(output.comments.map(entry => entry.action), ['created', 'created']);
+  assert.deepEqual(output.writes, [{ operation: 'submitReview', event: 'COMMENT', commentIndexes: [1, 2] }]);
+  assert.match(output.comments[0].body, new RegExp(`/blob/${sha}/src/file.js#L2`));
+  assert.equal(output.comments[1].body, '```suggestion\nnew value\n```');
+  assert.ok(mock.calls.every(call => call.method === 'GET'));
 });
 
 test('stdin preserves unicode across byte chunk boundaries and emits parseable JSON', async t => {
