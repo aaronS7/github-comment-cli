@@ -3,6 +3,7 @@ name: Release binaries
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,6 +34,8 @@ jobs:
           node-version: '26'
           package-manager-cache: false
       - run: npm ci
+      - run: npm run check
+      - run: npm test
       - run: npm run build:binary -- ${{ matrix.target }}
       - run: npm run smoke:binary
       - uses: actions/upload-artifact@v4
@@ -45,6 +48,7 @@ jobs:
 
   publish:
     needs: build
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
       contents: write

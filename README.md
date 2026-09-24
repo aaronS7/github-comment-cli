@@ -41,6 +41,7 @@ To install from this project's source directory instead:
 
 ```sh
 npm ci
+npm run build
 npm install --global .
 gh-comment --help
 ```
@@ -453,10 +454,11 @@ Fork and Dependabot `pull_request` workflows normally receive a read-only token 
 npm ci
 npm run check
 npm test
+npm run smoke:package
 ```
 
-Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
+The CLI and tests are authored in strict TypeScript. `npm run build` compiles them to JavaScript in `build/`; `npm run check` typechecks and lints, while `npm test` runs the compiled tests. `npm run smoke:package` packs and installs the npm artifact in a temporary directory, then checks the installed command. TypeScript is a development dependency and is not needed to run the installed CLI. Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
 
-Building a standalone executable requires Node.js 26 or newer. Run `npm run build:binary` on the target OS and CPU, then `npm run smoke:binary`. The binary and its compressed release archive are written to `dist/` with a matching SHA-256 checksum file for the archive. Pushing a `v<package-version>` tag builds and tests the release binaries on GitHub-hosted runners before publishing them.
+Building a standalone executable requires Node.js 26 or newer. Run `npm run build:binary` on the target OS and CPU, then `npm run smoke:binary`. The binary and its compressed release archive are written to `dist/` with a matching SHA-256 checksum file for the archive. The release workflow can be run manually on a branch to validate all five native targets; only a `v<package-version>` tag publishes a GitHub release.
 
 Current scope is GitHub.com PR conversation comments, resolvable line and file threads, replies, batched reviews with explicit review decisions, Markdown source links, native image/video attachments, multiple entries, duplicate checks, and one-comment conversation updates. Resolving threads, issue-specific commands, and a packaged GitHub Action remain outside this interface.

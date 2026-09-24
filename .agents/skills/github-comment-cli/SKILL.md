@@ -61,6 +61,7 @@ Install from this repository if `gh-comment` is not available:
 
 ```sh
 npm ci
+npm run build
 npm install --global .
 ```
 

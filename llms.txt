@@ -21,12 +21,12 @@ The CLI targets GitHub.com pull requests. It supports opt-in batch reviews with 
 
 ## Implementation
 
-- [CLI and publication flow](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/cli.js): options, validation, planning, dry runs, and output
-- [Local visual preview](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/visual-preview.js): safe GitHub-like HTML rendering of Markdown and comment structure
-- [Markdown renderer](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/markdown.js): comment entries and verified source-link conversion
-- [Git repository handling](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/git.js): tracked-file checks, commit matching, and permanent source URLs
-- [GitHub API integration](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/github.js): PR context, authentication, comments, and asset uploads
-- [Duplicate matching](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/dedupe.js): exact fingerprints and guarded lexical similarity
-- [Publication planner](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/publish.js): duplicate decisions, keyed updates, and comment writes
-- [Review target validation](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/review-threads.js): changed-file, diff-line, and reply-parent checks
-- [Attachment handling](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/attachments.js): local and remote media preparation and upload coordination
+- [CLI and publication flow](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/cli.ts): options, validation, planning, dry runs, and output
+- [Local visual preview](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/visual-preview.ts): safe GitHub-like HTML rendering of Markdown and comment structure
+- [Markdown renderer](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/markdown.ts): comment entries and verified source-link conversion
+- [Git repository handling](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/git.ts): tracked-file checks, commit matching, and permanent source URLs
+- [GitHub API integration](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/github.ts): PR context, authentication, comments, and asset uploads
+- [Duplicate matching](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/dedupe.ts): exact fingerprints and guarded lexical similarity
+- [Publication planner](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/publish.ts): duplicate decisions, keyed updates, and comment writes
+- [Review target validation](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/review-threads.ts): changed-file, diff-line, and reply-parent checks
+- [Attachment handling](https://raw.githubusercontent.com/aaronS7/github-comment-cli/main/src/attachments.ts): local and remote media preparation and upload coordination

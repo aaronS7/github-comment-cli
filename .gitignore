@@ -2,6 +2,7 @@ node_modules/
 *.tgz
 coverage/
 dist/
+build/
 .env
 .env.*
 *.pem
