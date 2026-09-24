@@ -466,6 +466,8 @@ Fork and Dependabot `pull_request` workflows normally receive a read-only token 
 
 ## Development
 
+Source development requires Node.js 22.13+ on the 22 line, or Node.js 24+, and Git because the lint step uses ESLint 10. The installed CLI still supports Node.js 22+.
+
 ```sh
 npm ci
 node bin/gh-comment.js --help

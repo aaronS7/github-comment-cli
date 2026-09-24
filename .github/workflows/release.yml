@@ -9,7 +9,21 @@ permissions:
   contents: read
 
 jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run check
+
   build:
+    needs: validate
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +48,6 @@ jobs:
           node-version: '26'
           package-manager-cache: false
       - run: npm ci
-      - run: npm run check
       - run: npm test
       - run: npm run build:binary -- ${{ matrix.target }}
       - run: npm run smoke:binary

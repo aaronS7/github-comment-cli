@@ -332,8 +332,8 @@ async function prepareRemote(source: string, options: SnapshotOptions): Promise<
       snapshot(output, media, options, { inspectMedia: true }), completed,
     ]);
     if (snapshotOutcome.status === 'rejected') throw snapshotOutcome.reason;
-    if (pipelineOutcome.status === 'rejected') throw pipelineOutcome.reason;
     result = snapshotOutcome.value;
+    if (pipelineOutcome.status === 'rejected') throw pipelineOutcome.reason;
     if (contentLength !== undefined && received !== Number(contentLength)) {
       throw failure('Remote attachment length did not match its declared Content-Length.', 'INCOMPLETE_DOWNLOAD');
     }

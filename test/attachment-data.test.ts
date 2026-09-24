@@ -301,6 +301,19 @@ test('rejects lying body lengths and cleans a completed disk snapshot on protoco
   assert.deepEqual(await readdir(tempRoot), []);
 });
 
+test('cleans a completed disk snapshot when the upstream pipeline fails on close', async t => {
+  const { tempRoot } = await fixture(t);
+  await assert.rejects(prepareAttachment('http://public.invalid/image.png', {
+    downloadRemote: true, memoryLimitBytes: 1, tempRoot,
+    lookup: async () => [{ address: '8.8.8.8', family: 4 }],
+    requestImpl: async () => mockResponse(new Readable({
+      read() { this.push(PNG); this.push(null); },
+      destroy(_error, callback) { setTimeout(() => callback(new Error('late close failure')), 20); },
+    }), 200, { 'content-type': 'image/png' }),
+  }), { code: 'DOWNLOAD_FAILED' });
+  assert.deepEqual(await readdir(tempRoot), []);
+});
+
 test('validates options and rejects unknown extension or extensionless unknown MIME', async t => {
   const invalidOptions: unknown[] = [{ memoryLimitBytes: -1 }, { maxBytes: 0 }, { timeoutMs: 0 }, { maxRedirects: -1 }, { downloadRemote: 'false' }, { allowPrivateNetwork: 'false' }];
   for (const options of invalidOptions) {
