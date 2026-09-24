@@ -37,6 +37,21 @@ The executable is `gh-comment`; the package is `github-comment-cli`.
 
 For a standalone executable without a Node.js installation, download the archive for your OS and CPU from the [latest GitHub release](https://github.com/aaronS7/github-comment-cli/releases/latest) and extract it with `tar -xzf <archive>`. On Linux or macOS, mark the extracted file executable with `chmod +x` if needed; on Windows, use the extracted `.exe`. Git must still be installed. Each release includes SHA-256 checksum files for its archives.
 
+The compiled CLI and test suite are also checked with Bun 1.4.2 and Deno 2.9.6. From a source checkout with Node.js 24 and the desired runtime installed, run:
+
+```sh
+npm ci
+npm run test:bun
+bun bin/gh-comment.js --version
+bun build/tools/smoke-package.js
+
+npm run test:deno
+deno run --allow-all bin/gh-comment.js --version
+deno run --allow-all build/tools/smoke-package.js
+```
+
+The test suite needs broad Deno permissions because it exercises filesystem access and subprocesses. Bun and Deno compatibility applies to running the compiled JavaScript CLI, tests, and package smoke check; npm lifecycle scripts and the standalone executable build remain Node.js workflows.
+
 To install from this project's source directory instead:
 
 ```sh
@@ -457,7 +472,7 @@ npm test
 npm run smoke:package
 ```
 
-The CLI and tests are authored in strict TypeScript. `npm run build` compiles them to JavaScript in `build/`; `npm run check` typechecks and lints, while `npm test` runs the compiled tests. `npm run smoke:package` packs and installs the npm artifact in a temporary directory, then checks the installed command. TypeScript is a development dependency and is not needed to run the installed CLI. Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
+The CLI and tests are authored in strict TypeScript. `npm run build` compiles them to JavaScript in `build/`; `npm run check` typechecks and lints, while `npm test` runs the compiled tests. `npm run smoke:package` packs and installs the npm artifact in a temporary directory, then checks the installed command. TypeScript is a development dependency and is not needed to run the installed CLI. Tests run locally without creating GitHub comments. CI runs the suite on Node.js 22 and 24, and checks the compiled tests and CLI under Bun 1.4.2 and Deno 2.9.6. Example report files reference [examples/demo.js](examples/demo.js); once this repository has a commit, they can be previewed with an explicit `--repo owner/repo` even without a GitHub remote.
 
 Building a standalone executable requires Node.js 26 or newer. Run `npm run build:binary` on the target OS and CPU, then `npm run smoke:binary`. The binary and its compressed release archive are written to `dist/` with a matching SHA-256 checksum file for the archive. The release workflow can be run manually on a branch to validate all five native targets; only a `v<package-version>` tag publishes a GitHub release.
 

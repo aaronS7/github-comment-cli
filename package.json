@@ -51,6 +51,8 @@
     "smoke:binary": "node tools/smoke-binary.mjs",
     "smoke:package": "node tools/smoke-package.mjs",
     "test": "npm run build && node --test \"build/test/*.test.js\"",
+    "test:bun": "npm run build && bun test build/test",
+    "test:deno": "npm run build && deno test -A build/test",
     "check": "npm run typecheck && npm run lint && node --check bin/gh-comment.js && node --check mint-app-token.mjs && node --check config-ui-server.mjs",
     "prepare": "npm run build",
     "prepack": "npm run check && npm test"
