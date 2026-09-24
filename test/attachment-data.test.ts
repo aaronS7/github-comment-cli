@@ -78,8 +78,10 @@ test('spills into private disk snapshots, supports file URLs, and removes snapsh
   assert.ok(!Buffer.isBuffer(stream));
   const snapshotPath = stream.path.toString();
   stream.destroy();
-  assert.equal((await stat(snapshotPath)).mode & 0o777, 0o600);
-  assert.equal((await stat(path.dirname(snapshotPath))).mode & 0o777, 0o700);
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(snapshotPath)).mode & 0o777, 0o600);
+    assert.equal((await stat(path.dirname(snapshotPath))).mode & 0o777, 0o700);
+  }
   await rm(filename);
   assert.deepEqual(await body(prepared), PNG);
   assert.equal(prepared.sha256, digest(PNG));

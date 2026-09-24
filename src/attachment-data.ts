@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import { constants, createReadStream } from 'node:fs';
-import { chmod, mkdtemp, open, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdtemp, open, rm } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
@@ -380,6 +380,11 @@ export async function prepareAttachment(source: string, {
   const media = mediaInfo(path.basename(filename));
   let handle;
   try {
+    // O_NOFOLLOW protects the open on systems that support it. Windows also
+    // needs an explicit link check because its open flags can follow symlinks.
+    if ((await lstat(filename)).isSymbolicLink()) {
+      throw failure('Local attachment cannot be a symbolic link.', 'FILE_READ_FAILED');
+    }
     // NONBLOCK prevents a named pipe from hanging before fstat can reject it.
     handle = await open(filename, constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
     const info = await handle.stat();

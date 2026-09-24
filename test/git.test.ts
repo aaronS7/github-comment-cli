@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { access, mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { test, type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import { parseGitHubRemote, parseLocalReference, Repository } from '../src/git.js';
@@ -32,7 +33,10 @@ test('parses local line destinations and leaves web URLs and headings alone', ()
   assert.deepEqual(parseLocalReference('README.md:12-15'), { path: 'README.md', startLine: 12, endLine: 15 });
   assert.deepEqual(parseLocalReference('src/example.js#L12-L15'), { path: 'src/example.js', startLine: 12, endLine: 15 });
   assert.deepEqual(parseLocalReference('/work/src/my%20file.js#L2'), { path: '/work/src/my file.js', startLine: 2, endLine: 2 });
-  assert.deepEqual(parseLocalReference('file:///work/src/example.js:2-3'), { path: '/work/src/example.js', startLine: 2, endLine: 3 });
+  const filePath = path.join(path.parse(process.cwd()).root, 'work', 'src', 'example.js');
+  assert.deepEqual(parseLocalReference(`${pathToFileURL(filePath).href}:2-3`), { path: filePath, startLine: 2, endLine: 3 });
+  const windowsPath = 'C:\\Users\\runner\\src\\example.js';
+  assert.deepEqual(parseLocalReference(`${windowsPath}:2`), { path: windowsPath, startLine: 2, endLine: 2 });
   assert.deepEqual(parseLocalReference('README.md'), { path: 'README.md', startLine: undefined, endLine: undefined });
   for (const value of ['https://github.com/example/project/blob/abc/file.js#L12', 'mailto:a@example.com', 'tel:1234', 'sms:1234', 'http:80', '#heading', '//example.com/file:12', 'docs.md#heading', 'docs.md?raw=1']) {
     assert.equal(parseLocalReference(value), null, value);
@@ -57,7 +61,7 @@ test('parses github.com HTTPS and SSH remotes without exposing credentials on er
 test('discovers checkout from a subdirectory and pins line ranges to full commits', async t => {
   const { root, sha } = await fixture(t);
   const repository = await Repository.discover(path.join(root, 'src'));
-  assert.equal(repository.root, root);
+  assert.equal(repository.root, await realpath(root));
   assert.equal(await repository.head(), sha);
   assert.equal((await repository.remote()).fullName, 'example/project');
   assert.deepEqual(await repository.resolveReference('src/example.js:2-3'), {
@@ -66,6 +70,16 @@ test('discovers checkout from a subdirectory and pins line ranges to full commit
   });
   assert.equal((await repository.resolveReference(path.join(root, 'src/example.js') + '#L1')).url, `https://github.com/example/project/blob/${sha}/src/example.js#L1`);
   assert.equal((await repository.resolveReference('README.md#L1', { repo: 'another/fork', sha: 'HEAD' })).url, `https://github.com/another/fork/blob/${sha}/README.md?plain=1#L1`);
+});
+
+test('accepts absolute references spelled through an alias of the checkout root', async t => {
+  const { root, repository } = await fixture(t);
+  const alias = `${root}-alias`;
+  t.after(() => rm(alias, { recursive: true, force: true }));
+  await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  const resolved = await repository.resolveReference(path.join(alias, 'src/example.js:2'));
+  assert.equal(resolved.path, 'src/example.js');
+  assert.equal(resolved.startLine, 2);
 });
 
 test('encodes filenames while preserving path separators', async t => {
@@ -141,13 +155,16 @@ test('rejects encoded traversal and symlinked directory escapes', async t => {
   for (const target of ['%2E%2E/outside.js:1', '..%2Foutside.js:1', '%2Fetc%2Fpasswd:1']) {
     await assert.rejects(repository.resolveReference(target), { code: 'OUTSIDE_REPOSITORY' });
   }
-  await symlink('/etc', path.join(root, 'external'));
+  const external = await mkdtemp(path.join(os.tmpdir(), 'gh-comment-external-'));
+  t.after(() => rm(external, { recursive: true, force: true }));
+  await writeFile(path.join(external, 'passwd'), 'outside\n');
+  await symlink(external, path.join(root, 'external'), process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(repository.resolveReference('external/passwd:1'), { code: 'OUTSIDE_REPOSITORY' });
 });
 
 test('treats shell metacharacters and Git pathspec characters as literal filenames', async t => {
-  const { repository, root } = await fixture(t, { 'src/$(touch owned).js': 'line\n', 'src/[a]*.js': 'line\n' });
+  const { repository, root } = await fixture(t, { 'src/$(touch owned).js': 'line\n', 'src/[a].js': 'line\n' });
   assert.equal((await repository.resolveReference('src/$(touch owned).js:1')).path, 'src/$(touch owned).js');
-  assert.equal((await repository.resolveReference('src/[a]*.js:1')).path, 'src/[a]*.js');
+  assert.equal((await repository.resolveReference('src/[a].js:1')).path, 'src/[a].js');
   await assert.rejects(access(path.join(root, 'owned')), { code: 'ENOENT' });
 });

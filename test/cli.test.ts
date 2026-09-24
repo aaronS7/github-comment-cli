@@ -546,5 +546,5 @@ test('installed executable entry point runs with Node', async () => {
   const executable = path.resolve('bin/gh-comment.js');
   const { stdout } = await exec(process.execPath, [executable, '--help']);
   assert.match(stdout, /gh-comment render/);
-  assert.equal((await readFile(executable, 'utf8')).split('\n')[0], '#!/usr/bin/env node');
+  assert.equal((await readFile(executable, 'utf8')).split(/\r?\n/)[0], '#!/usr/bin/env node');
 });

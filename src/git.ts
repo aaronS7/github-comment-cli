@@ -21,7 +21,8 @@ export function parseLocalReference(target: unknown) {
   if (typeof target !== 'string' || target.length === 0) return null;
   if (target.startsWith('#') || target.startsWith('//')) return null;
   if (/^(?:https?|ftp|ftps|mailto|tel|sms|ssh|git|data|urn|irc|ircs|news|about|blob|javascript):/i.test(target)) return null;
-  if (/^[a-z][a-z\d+.-]*:/i.test(target) && !target.startsWith('file:') && !/^[^/]+:\d+(?:-\d+)?$/.test(target)) {
+  const windowsAbsolutePath = /^[a-z]:[\\/]/i.test(target);
+  if (/^[a-z][a-z\d+.-]*:/i.test(target) && !target.startsWith('file:') && !windowsAbsolutePath && !/^[^/]+:\d+(?:-\d+)?$/.test(target)) {
     return null;
   }
 
@@ -160,7 +161,16 @@ export class Repository {
   async resolveReference(target: string, { sha, repo }: {sha?: string; repo?: string | {owner: string; repo: string}} = {}) {
     const reference = parseLocalReference(target);
     if (!reference) throw new RepositoryError(`Not a local file reference: "${target}".`, 'INVALID_PATH');
-    const absolute = path.resolve(this.root, reference.path);
+    const inputAbsolute = path.resolve(this.root, reference.path);
+    let absolute = inputAbsolute;
+    if (!isWithin(this.root, absolute) && path.isAbsolute(reference.path)) {
+      // macOS /var and Windows short names can spell an existing checkout
+      // differently. Accept the alias only when it resolves inside the root.
+      try {
+        const canonical = await realpath(absolute);
+        if (isWithin(this.root, canonical)) absolute = canonical;
+      } catch { /* Keep the lexical path so the normal outside/missing checks apply. */ }
+    }
     if (!isWithin(this.root, absolute)) {
       throw new RepositoryError(`Reference "${target}" is outside the repository. Use a path inside ${this.root}.`, 'OUTSIDE_REPOSITORY');
     }
@@ -169,8 +179,8 @@ export class Repository {
 
     let fileStat;
     try {
-      fileStat = await lstat(absolute);
-      if (!isWithin(this.root, await realpath(absolute))) {
+      fileStat = await lstat(inputAbsolute);
+      if (!isWithin(this.root, await realpath(inputAbsolute))) {
         throw new RepositoryError(`Reference "${target}" resolves outside the repository.`, 'OUTSIDE_REPOSITORY');
       }
     } catch (cause) {
