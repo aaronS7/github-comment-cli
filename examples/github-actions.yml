@@ -36,7 +36,6 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - run: npm ci
-      - run: npm run build
       - name: Install CLI from this source checkout
         run: npm install --global .
       - name: Preview report

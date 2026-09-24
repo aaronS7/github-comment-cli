@@ -14,7 +14,8 @@
     "lib": ["ES2022", "ESNext.Array", "DOM"],
     "types": ["node"],
     "declaration": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "inlineSources": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "mint-app-token.ts", "config-ui-server.ts", "tools/**/*.ts"],
   "exclude": ["build", "dist", "node_modules"]

@@ -56,10 +56,11 @@ To install from this project's source directory instead:
 
 ```sh
 npm ci
-npm run build
 npm install --global .
 gh-comment --help
 ```
+
+`npm ci` runs the `prepare` script and builds the CLI. To run it directly from the checkout without installing globally, use `node bin/gh-comment.js --help`.
 
 For authenticated GitHub access, the CLI checks `GH_TOKEN`, then `GITHUB_TOKEN`, then an existing GitHub CLI login (`gh auth token`). If you use GitHub CLI, run `gh auth login` once. Offline rendering needs no token; public PR metadata can be read without one. Publication requires a token with pull request write access to the target repository. See GitHub's [comment API permissions](https://docs.github.com/en/rest/issues/comments#create-an-issue-comment).
 
@@ -467,6 +468,7 @@ Fork and Dependabot `pull_request` workflows normally receive a read-only token 
 
 ```sh
 npm ci
+node bin/gh-comment.js --help
 npm run check
 npm test
 npm run smoke:package

@@ -61,9 +61,10 @@ Install from this repository if `gh-comment` is not available:
 
 ```sh
 npm ci
-npm run build
 npm install --global .
 ```
+
+`npm ci` runs the `prepare` build, so a separate build command is not needed here.
 
 Render a report locally, then inspect the publication plan for the target PR:
 
