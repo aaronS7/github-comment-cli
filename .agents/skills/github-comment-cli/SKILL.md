@@ -18,6 +18,10 @@ It needs Node.js 22 or newer, Git, a checkout containing the PR head for source 
 3. Put `<!-- gh-comment:next -->` on its own line to begin another comment. Keep it outside code fences. Without a separator, the file produces one comment.
 4. Use normal GitHub Markdown in the body. For collapsible content, use a `<details>` block with a `<summary>` ([GitHub's collapsed-section guide](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/organizing-information-with-collapsed-sections)).
 
+`gh-comment` preserves GitHub Markdown such as headings, lists, blockquotes, tables, task lists, inline and fenced code, HTML, and reference-style links. Use regular Markdown syntax (`[label](url)`, `![alt](image.png)`, backticks, and fenced code blocks). It rewrites only links whose destination is a recognized local code reference with line numbers; links in code blocks and inline code remain literal. Local reference forms include `[label](src/file.ts:42)`, `[label](src/file.ts:42-48)`, and `[label](src/file.ts#L42-L48)`. Paths are repository-relative (or absolute paths inside the checkout), and referenced tracked-file contents must match the selected commit. Images do not become source links.
+
+Each input file is one comment unless it contains the standalone separator `<!-- gh-comment:next -->`. Put a placement directive at the very beginning of its entry, on its own line, outside fenced code. Literal examples of directives must be fenced so they are not parsed. A body must contain visible content and fit GitHub's 65,536-character limit.
+
 For example:
 
 ```markdown
@@ -104,3 +108,34 @@ See the [GitHub Actions example](https://raw.githubusercontent.com/aaronS7/githu
 - Publication validates the report before writing. Multiple comments are separate GitHub requests, so a later network failure can leave earlier entries posted; inspect partial results before retrying.
 - Duplicate checks are scoped to comments by the authenticated account on the target PR. They do not compare comments from other accounts or other pull requests.
 - GitHub App identity comes from the installation token. To change the avatar, authenticate as the desired account or installed App rather than trying to set it in Markdown.
+
+## CLI command and option reference
+
+All commands take a Markdown file path or `-` for stdin:
+
+```sh
+gh-comment render <file.md|-> [options]
+gh-comment preview <file.md|-> [options]
+gh-comment post <file.md|-> [options]
+```
+
+- `render` validates and prints rendered Markdown; it works offline unless `--pr` is provided.
+- `preview` writes a local GitHub-like HTML preview and never publishes. Use `--output FILE` to choose its path.
+- `post` publishes comments/reviews; `--dry-run` prints planned writes and skips without publishing.
+- Shared target flags: `--pr NUMBER|URL` (post can infer from branch or Actions event), `--repo OWNER/REPO`, `--cwd DIR` (code checkout; default current directory), and `--json` (structured output).
+- `--sha COMMIT` selects a commit for offline `render` or `preview`; it cannot be used with `post` or a PR-targeted command.
+- `--key NAME` updates one conversation comment on later runs. It accepts 1–100 letters, numbers, dots, underscores, or hyphens and requires exactly one comment entry.
+- `--dedupe exact|similar|off` selects duplicate checks (`exact` is default). `--similarity-threshold 0..1` adjusts the similar-mode threshold (default `0.96`, greater than zero); setting the threshold alone does not enable similar mode. `.gh-comment.json` can set `dedupe` and `similarityThreshold`; `--config FILE` selects that JSON file. CLI flags override config.
+- `--attach FILE|URL` can be repeated to append media; file arguments are relative to the shell working directory. `--attachment-base DIR` changes the base directory for Markdown media paths (default: report directory).
+- `--upload-remote-images` opts in to downloading and uploading remote Markdown images and remote `--attach` URLs. `--allow-private-network` permits LAN/loopback downloads and should only be used when intentionally accessing a private host.
+- `--attachment-memory-limit MIB` sets the attachment snapshot memory budget (default `8`; larger snapshots spill to disk).
+- `--help`/`-h` prints help; `--version`/`-v` prints the version. `--output` is preview-only; `--dry-run` is post-only.
+
+Useful combinations:
+
+```sh
+cat report.md | gh-comment render - --repo owner/repo
+gh-comment post review.md --pr 123 --dry-run --json
+gh-comment preview review.md --pr 123 --output preview.html
+gh-comment post summary.md --pr 123 --key weekly-summary
+```
