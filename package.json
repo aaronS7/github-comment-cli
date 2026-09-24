@@ -2,11 +2,24 @@
   "name": "github-comment-cli",
   "version": "0.1.0",
   "description": "Post Markdown PR comments with verified, commit-pinned local code references.",
-  "repository": { "type": "git", "url": "git+https://github.com/aaronS7/github-comment-cli.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaronS7/github-comment-cli.git"
+  },
   "homepage": "https://aarons7.github.io/github-comment-cli/",
-  "bugs": { "url": "https://github.com/aaronS7/github-comment-cli/issues" },
-  "keywords": ["github", "pull-request", "code-review", "comments", "cli"],
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/aaronS7/github-comment-cli/issues"
+  },
+  "keywords": [
+    "github",
+    "pull-request",
+    "code-review",
+    "comments",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -16,7 +29,9 @@
   },
   "files": [
     "bin/",
-    "src/",
+    "build/src/",
+    "build/mint-app-token.js",
+    "build/config-ui-server.js",
     "examples/",
     "README.md",
     "llms.txt",
@@ -29,10 +44,17 @@
     "mint-app-token": "node mint-app-token.mjs",
     "app-config-ui": "node config-ui-server.mjs",
     "app-config-ui:code": "node config-ui-server.mjs --show-code",
-    "build:binary": "node tools/build-binary.mjs",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src test mint-app-token.ts config-ui-server.ts tools",
+    "build:binary": "npm run build && node tools/build-binary.mjs",
     "smoke:binary": "node tools/smoke-binary.mjs",
-    "test": "node --test",
-    "check": "node --check bin/gh-comment.js && node --check mint-app-token.mjs && node --check config-ui-server.mjs && node --check src/cli.js && node --check src/markdown.js && node --check src/git.js && node --check src/github.js && node --check src/config.js && node --check src/dedupe.js && node --check src/publish.js && node --check src/review-threads.js && node --check src/app-env.js && node --check src/attachment-data.js && node --check src/attachment-markdown.js && node --check src/attachment-metadata.js && node --check src/attachments.js && node --check src/visual-preview.js",
+    "smoke:package": "node tools/smoke-package.mjs",
+    "test": "npm run build && node --test \"build/test/*.test.js\"",
+    "test:bun": "npm run build && bun test build/test",
+    "test:deno": "npm run build && deno test -A build/test",
+    "check": "npm run typecheck && npm run lint && node --check bin/gh-comment.js && node --check mint-app-token.mjs && node --check config-ui-server.mjs",
+    "prepare": "npm run build",
     "prepack": "npm run check && npm test"
   },
   "dependencies": {
@@ -42,6 +64,11 @@
     "sanitize-html": "^2.17.7"
   },
   "devDependencies": {
-    "esbuild": "^0.28.2"
+    "@types/node": "^22.20.4",
+    "@types/sanitize-html": "^2.16.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.11.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1"
   }
 }

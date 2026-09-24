@@ -1,0 +1,51 @@
+name: Update last commit badge
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: last-commit-badge
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Generate badge from main's latest commit
+        run: node scripts/generate-last-commit-badge.mjs "$RUNNER_TEMP/last-commit.svg"
+      - name: Publish badge SVG
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin badges >/dev/null; then
+            git fetch origin badges:refs/remotes/origin/badges
+            git switch -C badges refs/remotes/origin/badges
+          else
+            git switch --orphan badges
+            git rm -rf .
+          fi
+
+          cp "$RUNNER_TEMP/last-commit.svg" last-commit.svg
+          git add last-commit.svg
+          if git diff --cached --quiet; then
+            echo "Badge is unchanged"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update last commit badge"
+          git push origin badges

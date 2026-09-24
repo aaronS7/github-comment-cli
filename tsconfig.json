@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "build",
+    "noEmitOnError": true,
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "lib": ["ES2022", "ESNext.Array", "DOM"],
+    "types": ["node"],
+    "declaration": true,
+    "sourceMap": true,
+    "inlineSources": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "mint-app-token.ts", "config-ui-server.ts", "tools/**/*.ts"],
+  "exclude": ["build", "dist", "node_modules"]
+}
